@@ -19,7 +19,8 @@ public sealed partial class Email : ValueObject
             return UserErrors.EmailEmpty;
         }
 
-#pragma warning disable CA1308 // Motivo: DESIGN §4.1 exige el correo normalizado a minúsculas.
+// The email address is converted to lowercase
+#pragma warning disable CA1308
         string normalized = value.Trim().ToLowerInvariant();
 #pragma warning restore CA1308
 

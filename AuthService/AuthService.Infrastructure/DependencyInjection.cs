@@ -67,7 +67,7 @@ public static class DependencyInjection
         services.Configure<AuthTokenOptions>(configuration.GetSection(AuthTokenOptions.SectionName));
         services.AddSingleton<SigningKeyProvider>();
         services.AddSingleton<ITokenMetadataProvider, TokenMetadataProvider>();
-        services.AddScoped<IPasswordHasher, Argon2idPasswordHasher>();
+        services.AddScoped<IPasswordHasher, Argon2IdPasswordHasher>();
         services.AddScoped<IAccessTokenGenerator, RsaJwtTokenGenerator>();
         services.AddScoped<IRefreshTokenGenerator, RefreshTokenGenerator>();
     }

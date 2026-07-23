@@ -3,7 +3,7 @@ using Isopoh.Cryptography.Argon2;
 
 namespace AuthService.Infrastructure.Security;
 
-internal sealed class Argon2idPasswordHasher : IPasswordHasher
+internal sealed class Argon2IdPasswordHasher : IPasswordHasher
 {
     public string Hash(string password) => Argon2.Hash(password);
 
