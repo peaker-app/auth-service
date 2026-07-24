@@ -3,4 +3,5 @@ using Common.Application.Messaging;
 
 namespace AuthService.Application.Users.LoginUser;
 
-public sealed record LoginUserCommand(string Email, string Password, string? IpAddress) : ICommand<AuthTokensResponse>;
+public sealed record LoginUserCommand(string Identifier, string Password, string? IpAddress)
+    : ICommand<AuthTokensResponse>;

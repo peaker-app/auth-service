@@ -7,7 +7,6 @@ using Common.API.Middlewares;
 using Common.API.Security;
 using Common.Application.Abstractions;
 using Common.Infrastructure.Observability;
-using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
@@ -29,11 +28,6 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddHealthChecks().AddDbContextCheck<AuthDbContext>();
 
 WebApplication app = builder.Build();
-
-using (IServiceScope scope = app.Services.CreateScope())
-{
-    await scope.ServiceProvider.GetRequiredService<AuthDbContext>().Database.MigrateAsync();
-}
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<CorrelationIdMiddleware>();

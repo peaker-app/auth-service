@@ -6,7 +6,8 @@ internal static class UserMother
 {
     public const string PasswordHash = "argon2id$hash";
 
-    public static User Registered() => User.Register(TestEmail.Create(), PasswordHash).Value;
+    public static User Registered() =>
+        User.Register(TestEmail.Create(), TestUsername.Create(), PasswordHash).Value;
 
     public static User WithFailedLogins(int count, DateTime utcNow)
     {

@@ -37,21 +37,28 @@ public static class DependencyInjection
         services.AddSingleton<OutboxInterceptor>();
         services.Configure<OutboxOptions>(configuration.GetSection(OutboxOptions.SectionName));
 
-        services.AddAuthDbContext(configuration);
+        services.AddAuthDbContext();
         services.AddRepositories();
         services.AddHostedService<OutboxProcessor<AuthDbContext>>();
     }
 
-    private static void AddAuthDbContext(this IServiceCollection services, IConfiguration configuration)
+    private static void AddAuthDbContext(this IServiceCollection services)
     {
-        string connectionString = configuration.GetConnectionString("AuthDatabase")
-            ?? throw new InvalidOperationException("Connection string 'AuthDatabase' is not configured.");
-
         services.AddDbContext<AuthDbContext>((provider, options) => options
-            .UseMySQL(connectionString)
+            .UseMySQL(ResolveConnectionString(provider))
             .AddInterceptors(
                 provider.GetRequiredService<AuditableEntityInterceptor>(),
                 provider.GetRequiredService<OutboxInterceptor>()));
+    }
+
+    private static string ResolveConnectionString(IServiceProvider provider)
+    {
+        string? connectionString = provider.GetRequiredService<IConfiguration>()
+            .GetConnectionString("AuthDatabase");
+
+        return string.IsNullOrWhiteSpace(connectionString)
+            ? throw new InvalidOperationException("Connection string 'AuthDatabase' is not configured.")
+            : connectionString;
     }
 
     private static void AddRepositories(this IServiceCollection services)

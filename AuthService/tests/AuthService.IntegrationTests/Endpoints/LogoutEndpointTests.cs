@@ -13,8 +13,8 @@ public sealed class LogoutEndpointTests(AuthServiceApiFactory factory)
     [Fact]
     public async Task Logout_WithValidToken_RevokesRefreshToken()
     {
-        string email = await _client.RegisterUserAsync();
-        TokenPair tokens = await _client.LoginAsync(email);
+        RegisteredUser user = await _client.RegisterUserAsync();
+        TokenPair tokens = await _client.LoginWithTokensAsync(user.Email);
 
         using HttpResponseMessage logout = await _client.LogoutAsync(tokens.AccessToken, tokens.RefreshToken);
         using HttpResponseMessage refresh = await _client.RefreshAsync(tokens.RefreshToken);

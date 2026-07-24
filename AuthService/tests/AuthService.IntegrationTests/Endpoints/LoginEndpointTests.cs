@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
 using FluentAssertions;
 using Xunit;
 
@@ -11,23 +10,51 @@ public sealed class LoginEndpointTests(AuthServiceApiFactory factory)
     private readonly HttpClient _client = factory.CreateClient();
 
     [Fact]
-    public async Task Login_WithValidCredentials_ReturnsTokens()
+    public async Task Login_WithEmailIdentifier_ReturnsTokens()
     {
-        string email = await _client.RegisterUserAsync();
+        RegisteredUser user = await _client.RegisterUserAsync();
 
-        TokenPair tokens = await _client.LoginAsync(email);
+        TokenPair tokens = await _client.LoginWithTokensAsync(user.Email);
 
         tokens.AccessToken.Should().NotBeNullOrWhiteSpace();
         tokens.RefreshToken.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]
+    public async Task Login_WithUsernameIdentifier_ReturnsTokens()
+    {
+        RegisteredUser user = await _client.RegisterUserAsync();
+
+        TokenPair tokens = await _client.LoginWithTokensAsync(user.Username);
+
+        tokens.AccessToken.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Login_WithUsernameInDifferentCasing_ReturnsTokens()
+    {
+        RegisteredUser user = await _client.RegisterUserAsync();
+
+        TokenPair tokens = await _client.LoginWithTokensAsync(user.Username.ToUpperInvariant());
+
+        tokens.AccessToken.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task Login_WithUnknownIdentifier_ReturnsUnauthorized()
+    {
+        using HttpResponseMessage response = await _client.LoginAsync(
+            ApiTestHelpers.UniqueUsername(), ApiTestHelpers.DefaultPassword);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task Login_WithWrongPassword_ReturnsUnauthorized()
     {
-        string email = await _client.RegisterUserAsync();
+        RegisteredUser user = await _client.RegisterUserAsync();
 
-        using HttpResponseMessage response = await _client.PostAsJsonAsync(
-            "/api/auth/login", new { email, password = "the-wrong-password" });
+        using HttpResponseMessage response = await _client.LoginAsync(user.Email, "the-wrong-password");
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -35,11 +62,11 @@ public sealed class LoginEndpointTests(AuthServiceApiFactory factory)
     [Fact]
     public async Task Login_AfterFiveFailedAttempts_LocksAccount()
     {
-        string email = await _client.RegisterUserAsync();
-        await _client.FailLoginsAsync(email, 5);
+        RegisteredUser user = await _client.RegisterUserAsync();
+        await _client.FailLoginsAsync(user.Email, 5);
 
-        using HttpResponseMessage response = await _client.PostAsJsonAsync(
-            "/api/auth/login", new { email, password = ApiTestHelpers.DefaultPassword });
+        using HttpResponseMessage response = await _client.LoginAsync(
+            user.Email, ApiTestHelpers.DefaultPassword);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }

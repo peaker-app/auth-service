@@ -11,7 +11,7 @@ namespace AuthService.Application.UnitTests.Users;
 
 public sealed class RegisterUserCommandHandlerTests
 {
-    private static readonly RegisterUserCommand Command = new("Hiker@Peaker.io", "correct-horse-battery");
+    private static readonly RegisterUserCommand Command = new("Hiker@Peaker.io", "hiker", "correct-horse-battery");
 
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
     private readonly IPasswordHasher _passwordHasher = Substitute.For<IPasswordHasher>();
@@ -28,7 +28,7 @@ public sealed class RegisterUserCommandHandlerTests
     [Fact]
     public async Task Handle_WithValidData_PersistsUserAndReturnsId()
     {
-        _userRepository.ExistsByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns(false);
+        GivenIdentifiersAreAvailable();
         _breachedPasswordChecker.IsBreachedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
 
         Result<Guid> result = await _handler.Handle(Command, CancellationToken.None);
@@ -48,8 +48,18 @@ public sealed class RegisterUserCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WithInvalidUsername_ReturnsValidationAndDoesNotPersist()
+    {
+        Result<Guid> result = await _handler.Handle(Command with { Username = "_nope_" }, CancellationToken.None);
+
+        result.Error.Should().Be(UserErrors.UsernameInvalid);
+        _userRepository.DidNotReceive().Add(Arg.Any<User>());
+    }
+
+    [Fact]
     public async Task Handle_WithExistingEmail_ReturnsConflict()
     {
+        GivenIdentifiersAreAvailable();
         _userRepository.ExistsByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns(true);
 
         Result<Guid> result = await _handler.Handle(Command, CancellationToken.None);
@@ -58,13 +68,30 @@ public sealed class RegisterUserCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WithExistingUsername_ReturnsConflict()
+    {
+        GivenIdentifiersAreAvailable();
+        _userRepository.ExistsByUsernameAsync(Arg.Any<Username>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        Result<Guid> result = await _handler.Handle(Command, CancellationToken.None);
+
+        result.Error.Should().Be(UserErrors.UsernameAlreadyRegistered);
+    }
+
+    [Fact]
     public async Task Handle_WithBreachedPassword_ReturnsValidation()
     {
-        _userRepository.ExistsByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns(false);
+        GivenIdentifiersAreAvailable();
         _breachedPasswordChecker.IsBreachedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
 
         Result<Guid> result = await _handler.Handle(Command, CancellationToken.None);
 
         result.Error.Should().Be(UserErrors.PasswordBreached);
+    }
+
+    private void GivenIdentifiersAreAvailable()
+    {
+        _userRepository.ExistsByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns(false);
+        _userRepository.ExistsByUsernameAsync(Arg.Any<Username>(), Arg.Any<CancellationToken>()).Returns(false);
     }
 }

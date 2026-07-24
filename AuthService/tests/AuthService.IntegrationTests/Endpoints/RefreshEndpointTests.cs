@@ -12,8 +12,8 @@ public sealed class RefreshEndpointTests(AuthServiceApiFactory factory)
     [Fact]
     public async Task Refresh_WithValidToken_RotatesTokens()
     {
-        string email = await _client.RegisterUserAsync();
-        TokenPair initial = await _client.LoginAsync(email);
+        RegisteredUser user = await _client.RegisterUserAsync();
+        TokenPair initial = await _client.LoginWithTokensAsync(user.Email);
 
         TokenPair rotated = await _client.RefreshTokensAsync(initial.RefreshToken);
 
@@ -23,8 +23,8 @@ public sealed class RefreshEndpointTests(AuthServiceApiFactory factory)
     [Fact]
     public async Task Refresh_ReusingRevokedToken_RevokesWholeChain()
     {
-        string email = await _client.RegisterUserAsync();
-        TokenPair initial = await _client.LoginAsync(email);
+        RegisteredUser user = await _client.RegisterUserAsync();
+        TokenPair initial = await _client.LoginWithTokensAsync(user.Email);
         TokenPair rotated = await _client.RefreshTokensAsync(initial.RefreshToken);
 
         using HttpResponseMessage reuse = await _client.RefreshAsync(initial.RefreshToken);

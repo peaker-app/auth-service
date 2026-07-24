@@ -12,9 +12,9 @@ public sealed class UserTests
     private static readonly DateTime Now = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
 
     [Fact]
-    public void Register_WithValidEmailAndHash_CreatesActiveUnconfirmedUser()
+    public void Register_WithValidCredentials_CreatesActiveUnconfirmedUser()
     {
-        Result<User> result = User.Register(TestEmail.Create(), UserMother.PasswordHash);
+        Result<User> result = User.Register(TestEmail.Create(), TestUsername.Create(), UserMother.PasswordHash);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(UserStatus.Active);
@@ -22,11 +22,29 @@ public sealed class UserTests
     }
 
     [Fact]
-    public void Register_RaisesUserRegisteredDomainEvent()
+    public void Register_KeepsTheUsernameAsTyped()
+    {
+        Result<User> result = User.Register(TestEmail.Create(), TestUsername.Create(), UserMother.PasswordHash);
+
+        result.Value.Username.Value.Should().Be(TestUsername.Raw);
+    }
+
+    [Fact]
+    public void Register_RaisesUserRegisteredDomainEventCarryingTheUsername()
+    {
+        Result<User> result = User.Register(TestEmail.Create(), TestUsername.Create(), UserMother.PasswordHash);
+
+        result.Value.DomainEvents.Should().ContainSingle()
+            .Which.Should().BeOfType<UserRegisteredDomainEvent>()
+            .Which.Username.Should().Be(TestUsername.Raw);
+    }
+
+    [Fact]
+    public void Register_RaisesUserRegisteredDomainEventCarryingTheEmail()
     {
         Email email = TestEmail.Create();
 
-        Result<User> result = User.Register(email, UserMother.PasswordHash);
+        Result<User> result = User.Register(email, TestUsername.Create(), UserMother.PasswordHash);
 
         result.Value.DomainEvents.Should().ContainSingle()
             .Which.Should().BeOfType<UserRegisteredDomainEvent>()
@@ -36,7 +54,7 @@ public sealed class UserTests
     [Fact]
     public void Register_WithEmptyHash_ReturnsPasswordHashMissing()
     {
-        Result<User> result = User.Register(TestEmail.Create(), "   ");
+        Result<User> result = User.Register(TestEmail.Create(), TestUsername.Create(), "   ");
 
         result.Error.Should().Be(UserErrors.PasswordHashMissing);
     }

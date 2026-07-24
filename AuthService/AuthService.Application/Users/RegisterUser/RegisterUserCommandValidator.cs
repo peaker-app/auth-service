@@ -1,3 +1,4 @@
+using AuthService.Domain.Users;
 using FluentValidation;
 
 namespace AuthService.Application.Users.RegisterUser;
@@ -9,6 +10,11 @@ internal sealed class RegisterUserCommandValidator : AbstractValidator<RegisterU
     public RegisterUserCommandValidator()
     {
         RuleFor(command => command.Email).NotEmpty();
+
+        RuleFor(command => command.Username)
+            .NotEmpty()
+            .MinimumLength(Username.MinLength)
+            .MaximumLength(Username.MaxLength);
 
         RuleFor(command => command.Password)
             .NotEmpty()

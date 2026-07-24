@@ -13,6 +13,18 @@ public static class UserErrors
     public static readonly Error EmailInvalid =
         Error.Validation("User.EmailInvalid", "El formato del correo electrónico no es válido.");
 
+    public static readonly Error UsernameEmpty =
+        Error.Validation("User.UsernameEmpty", "El nombre de usuario es obligatorio.");
+
+    public static readonly Error UsernameInvalid =
+        Error.Validation(
+            "User.UsernameInvalid",
+            $"El nombre de usuario debe tener entre {Username.MinLength} y {Username.MaxLength} caracteres " +
+            "alfanuméricos, punto, guion o guion bajo, empezando y acabando en letra o dígito.");
+
+    public static readonly Error UsernameAlreadyRegistered =
+        Error.Conflict("User.UsernameAlreadyRegistered", "El nombre de usuario ya está registrado.");
+
     public static readonly Error PasswordHashMissing =
         Error.Validation("User.PasswordHashMissing", "La credencial de la cuenta es obligatoria.");
 

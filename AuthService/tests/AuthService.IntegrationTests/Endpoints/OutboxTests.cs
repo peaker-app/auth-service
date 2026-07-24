@@ -17,7 +17,7 @@ public sealed class OutboxTests(AuthServiceApiFactory factory)
     [Fact]
     public async Task Register_PublishesUserRegistered_ViaOutbox()
     {
-        using HttpResponseMessage response = await _client.RegisterAsync(ApiTestHelpers.UniqueEmail());
+        using HttpResponseMessage response = await _client.RegisterAsync(ApiTestHelpers.NewUser());
         RegisterResult created = (await response.Content.ReadFromJsonAsync<RegisterResult>())!;
 
         bool processed = await WaitForOutboxProcessedAsync(created.Id);

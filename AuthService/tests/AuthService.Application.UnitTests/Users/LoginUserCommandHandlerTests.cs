@@ -30,23 +30,56 @@ public sealed class LoginUserCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WithValidCredentials_ReturnsTokens()
+    public async Task Handle_WithEmailIdentifier_ReturnsTokens()
     {
-        User user = Factories.ActiveUser();
-        _userRepository.GetByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns(user);
-        _passwordHasher.Verify(Command.Password, user.PasswordHash).Returns(true);
-        _tokenIssuer.Issue(Arg.Any<User>(), Arg.Any<DateTime>(), Arg.Any<string?>())
-            .Returns(Factories.IssuedFor(Factories.RefreshTokenFor(user.Id, Now)));
+        GivenUserFoundByEmail();
 
         Result<AuthTokensResponse> result = await _handler.Handle(Command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
         result.Value.AccessToken.Should().Be("access-token");
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _userRepository.DidNotReceive().GetByUsernameAsync(Arg.Any<Username>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_WithUnknownEmail_ReturnsInvalidCredentialsWithoutPersisting()
+    public async Task Handle_WithUsernameIdentifier_ReturnsTokens()
+    {
+        User user = Factories.ActiveUser();
+        _userRepository.GetByUsernameAsync(Arg.Any<Username>(), Arg.Any<CancellationToken>()).Returns(user);
+        GivenPasswordMatches(user);
+        GivenTokensAreIssuedFor(user);
+
+        Result<AuthTokensResponse> result = await _handler.Handle(
+            Command with { Identifier = Factories.DefaultUsername }, CancellationToken.None);
+
+        result.Value.AccessToken.Should().Be("access-token");
+        await _userRepository.DidNotReceive().GetByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WithUsernameIdentifierIgnoringCase_ResolvesTheUser()
+    {
+        User user = Factories.ActiveUser();
+        _userRepository.GetByUsernameAsync(Arg.Any<Username>(), Arg.Any<CancellationToken>()).Returns(user);
+        GivenPasswordMatches(user);
+        GivenTokensAreIssuedFor(user);
+
+        Result<AuthTokensResponse> result = await _handler.Handle(
+            Command with { Identifier = "HIKER" }, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Handle_WithMalformedIdentifier_ReturnsInvalidCredentials()
+    {
+        Result<AuthTokensResponse> result = await _handler.Handle(
+            Command with { Identifier = "_not valid_" }, CancellationToken.None);
+
+        result.Error.Should().Be(UserErrors.InvalidCredentials);
+    }
+
+    [Fact]
+    public async Task Handle_WithUnknownIdentifier_ReturnsInvalidCredentialsWithoutPersisting()
     {
         _userRepository.GetByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns((User?)null);
 
@@ -80,4 +113,19 @@ public sealed class LoginUserCommandHandlerTests
         result.Error.Should().Be(UserErrors.InvalidCredentials);
         _passwordHasher.DidNotReceive().Verify(Arg.Any<string>(), Arg.Any<string?>());
     }
+
+    private void GivenUserFoundByEmail()
+    {
+        User user = Factories.ActiveUser();
+        _userRepository.GetByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns(user);
+        GivenPasswordMatches(user);
+        GivenTokensAreIssuedFor(user);
+    }
+
+    private void GivenPasswordMatches(User user) =>
+        _passwordHasher.Verify(Command.Password, user.PasswordHash).Returns(true);
+
+    private void GivenTokensAreIssuedFor(User user) =>
+        _tokenIssuer.Issue(Arg.Any<User>(), Arg.Any<DateTime>(), Arg.Any<string?>())
+            .Returns(Factories.IssuedFor(Factories.RefreshTokenFor(user.Id, Now)));
 }

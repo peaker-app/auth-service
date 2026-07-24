@@ -7,9 +7,13 @@ namespace AuthService.Application.UnitTests.TestData;
 internal static class Factories
 {
     public const string DefaultEmail = "hiker@peaker.io";
+    public const string DefaultUsername = "hiker";
     public const string DefaultHash = "argon2id$hash";
 
-    public static User ActiveUser() => User.Register(Email.Create(DefaultEmail).Value, DefaultHash).Value;
+    public static User ActiveUser() => User.Register(
+        Email.Create(DefaultEmail).Value,
+        Username.Create(DefaultUsername).Value,
+        DefaultHash).Value;
 
     public static User LockedUser(DateTime utcNow)
     {

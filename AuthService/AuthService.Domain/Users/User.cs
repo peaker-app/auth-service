@@ -15,14 +15,17 @@ public sealed class User : AggregateRoot
     {
     }
 
-    private User(Guid id, Email email, string passwordHash) : base(id)
+    private User(Guid id, Email email, Username username, string passwordHash) : base(id)
     {
         Email = email;
+        Username = username;
         PasswordHash = passwordHash;
         Status = UserStatus.Active;
     }
 
     public Email Email { get; private set; } = null!;
+
+    public Username Username { get; private set; } = null!;
 
     public string? PasswordHash { get; private set; }
 
@@ -34,15 +37,15 @@ public sealed class User : AggregateRoot
 
     public DateTime? LockedUntilUtc { get; private set; }
 
-    public static Result<User> Register(Email email, string passwordHash)
+    public static Result<User> Register(Email email, Username username, string passwordHash)
     {
         if (string.IsNullOrWhiteSpace(passwordHash))
         {
             return UserErrors.PasswordHashMissing;
         }
 
-        User user = new(Guid.CreateVersion7(), email, passwordHash);
-        user.Raise(new UserRegisteredDomainEvent(user.Id, email.Value));
+        User user = new(Guid.CreateVersion7(), email, username, passwordHash);
+        user.Raise(new UserRegisteredDomainEvent(user.Id, email.Value, username.Value));
 
         return user;
     }

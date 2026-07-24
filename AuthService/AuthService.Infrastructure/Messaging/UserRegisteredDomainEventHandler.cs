@@ -15,6 +15,7 @@ internal sealed class UserRegisteredDomainEventHandler(
             {
                 UserId = domainEvent.UserId,
                 Email = domainEvent.Email,
+                Username = domainEvent.Username,
                 OccurredAtUtc = dateTimeProvider.UtcNow
             },
             cancellationToken);

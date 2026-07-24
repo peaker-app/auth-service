@@ -7,28 +7,44 @@ internal sealed record TokenPair(string AccessToken, string RefreshToken, int Ex
 
 internal sealed record RegisterResult(Guid Id);
 
+internal sealed record RegisteredUser(string Email, string Username);
+
 internal static class ApiTestHelpers
 {
     public const string DefaultPassword = "correct-horse-battery-staple";
 
     public static string UniqueEmail() => $"user-{Guid.CreateVersion7():N}@peaker.io";
 
-    public static Task<HttpResponseMessage> RegisterAsync(this HttpClient client, string email, string? password = null) =>
-        client.PostAsJsonAsync("/api/auth/register", new { email, password = password ?? DefaultPassword });
+    public static string UniqueUsername() => $"hiker{Guid.CreateVersion7():N}"[..24];
 
-    public static async Task<string> RegisterUserAsync(this HttpClient client)
+    public static Task<HttpResponseMessage> RegisterAsync(
+        this HttpClient client,
+        RegisteredUser user,
+        string? password = null) =>
+        client.PostAsJsonAsync(
+            "/api/auth/register",
+            new { email = user.Email, username = user.Username, password = password ?? DefaultPassword });
+
+    public static RegisteredUser NewUser() => new(UniqueEmail(), UniqueUsername());
+
+    public static async Task<RegisteredUser> RegisterUserAsync(this HttpClient client)
     {
-        string email = UniqueEmail();
-        using HttpResponseMessage response = await client.RegisterAsync(email);
+        RegisteredUser user = NewUser();
+        using HttpResponseMessage response = await client.RegisterAsync(user);
         response.EnsureSuccessStatusCode();
 
-        return email;
+        return user;
     }
 
-    public static async Task<TokenPair> LoginAsync(this HttpClient client, string email, string? password = null)
+    public static Task<HttpResponseMessage> LoginAsync(
+        this HttpClient client,
+        string identifier,
+        string password) =>
+        client.PostAsJsonAsync("/api/auth/login", new { identifier, password });
+
+    public static async Task<TokenPair> LoginWithTokensAsync(this HttpClient client, string identifier)
     {
-        using HttpResponseMessage response = await client.PostAsJsonAsync(
-            "/api/auth/login", new { email, password = password ?? DefaultPassword });
+        using HttpResponseMessage response = await client.LoginAsync(identifier, DefaultPassword);
         response.EnsureSuccessStatusCode();
 
         return (await response.Content.ReadFromJsonAsync<TokenPair>())!;
@@ -59,12 +75,12 @@ internal static class ApiTestHelpers
         return await client.SendAsync(request);
     }
 
-    public static async Task FailLoginsAsync(this HttpClient client, string email, int count)
+    public static async Task FailLoginsAsync(this HttpClient client, string identifier, int count)
     {
         for (int attempt = 0; attempt < count; attempt++)
         {
-            using HttpResponseMessage response = await client.PostAsJsonAsync(
-                "/api/auth/login", new { email, password = "definitely-the-wrong-password" });
+            using HttpResponseMessage response = await client.LoginAsync(
+                identifier, "definitely-the-wrong-password");
         }
     }
 }

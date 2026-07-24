@@ -17,18 +17,34 @@ internal sealed class RegisterUserCommandHandler(
         Result<Email> email = Email.Create(command.Email);
         if (email.IsFailure) return Result.Failure<Guid>(email.Error);
 
-        if (await userRepository.ExistsByEmailAsync(email.Value, cancellationToken))
-            return Result.Failure<Guid>(UserErrors.EmailAlreadyRegistered);
+        Result<Username> username = Username.Create(command.Username);
+        if (username.IsFailure) return Result.Failure<Guid>(username.Error);
+
+        Result availability = await EnsureAvailableAsync(email.Value, username.Value, cancellationToken);
+        if (availability.IsFailure) return Result.Failure<Guid>(availability.Error);
 
         if (await breachedPasswordChecker.IsBreachedAsync(command.Password, cancellationToken))
             return Result.Failure<Guid>(UserErrors.PasswordBreached);
 
-        Result<User> user = User.Register(email.Value, passwordHasher.Hash(command.Password));
+        Result<User> user = User.Register(email.Value, username.Value, passwordHasher.Hash(command.Password));
         if (user.IsFailure) return Result.Failure<Guid>(user.Error);
 
         userRepository.Add(user.Value);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return user.Value.Id;
+    }
+
+    private async Task<Result> EnsureAvailableAsync(
+        Email email,
+        Username username,
+        CancellationToken cancellationToken)
+    {
+        if (await userRepository.ExistsByEmailAsync(email, cancellationToken))
+            return Result.Failure(UserErrors.EmailAlreadyRegistered);
+
+        return await userRepository.ExistsByUsernameAsync(username, cancellationToken)
+            ? Result.Failure(UserErrors.UsernameAlreadyRegistered)
+            : Result.Success();
     }
 }
