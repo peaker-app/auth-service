@@ -27,6 +27,14 @@ internal static class Factories
         return user;
     }
 
+    public static User DeletedUser()
+    {
+        User user = ActiveUser();
+        user.Delete();
+
+        return user;
+    }
+
     public static RefreshToken RefreshTokenFor(Guid userId, DateTime utcNow) =>
         RefreshToken.Issue(new RefreshTokenDraft(userId, "token-hash", utcNow.AddDays(7), "127.0.0.1"));
 

@@ -20,12 +20,28 @@ public sealed class OutboxTests(AuthServiceApiFactory factory)
         using HttpResponseMessage response = await _client.RegisterAsync(ApiTestHelpers.NewUser());
         RegisterResult created = (await response.Content.ReadFromJsonAsync<RegisterResult>())!;
 
-        bool processed = await WaitForOutboxProcessedAsync(created.Id);
+        bool processed = await WaitForOutboxProcessedAsync(created.Id, "UserRegisteredDomainEvent");
 
         processed.Should().BeTrue();
     }
 
-    private async Task<bool> WaitForOutboxProcessedAsync(Guid userId)
+    [Fact]
+    public async Task Delete_PublishesUserDeleted_ViaOutbox()
+    {
+        RegisteredUser user = ApiTestHelpers.NewUser();
+        using HttpResponseMessage registration = await _client.RegisterAsync(user);
+        RegisterResult created = (await registration.Content.ReadFromJsonAsync<RegisterResult>())!;
+
+        TokenPair tokens = await _client.LoginWithTokensAsync(user.Email);
+        using HttpResponseMessage deletion = await _client.DeleteAccountAsync(tokens.AccessToken);
+        deletion.EnsureSuccessStatusCode();
+
+        bool processed = await WaitForOutboxProcessedAsync(created.Id, "UserDeletedDomainEvent");
+
+        processed.Should().BeTrue();
+    }
+
+    private async Task<bool> WaitForOutboxProcessedAsync(Guid userId, string eventTypeName)
     {
         for (int attempt = 0; attempt < 20; attempt++)
         {
@@ -33,7 +49,10 @@ public sealed class OutboxTests(AuthServiceApiFactory factory)
             AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
 
             bool processed = await context.Set<OutboxMessage>()
-                .AnyAsync(message => message.ProcessedAtUtc != null && message.Content.Contains(userId.ToString()));
+                .AnyAsync(message =>
+                    message.ProcessedAtUtc != null &&
+                    message.Type.Contains(eventTypeName) &&
+                    message.Content.Contains(userId.ToString()));
 
             if (processed)
             {

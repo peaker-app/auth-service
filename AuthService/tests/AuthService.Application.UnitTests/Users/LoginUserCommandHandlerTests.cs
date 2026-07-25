@@ -114,6 +114,17 @@ public sealed class LoginUserCommandHandlerTests
         _passwordHasher.DidNotReceive().Verify(Arg.Any<string>(), Arg.Any<string?>());
     }
 
+    [Fact]
+    public async Task Handle_WhenAccountDeleted_ReturnsInvalidCredentialsWithoutVerifying()
+    {
+        _userRepository.GetByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns(Factories.DeletedUser());
+
+        Result<AuthTokensResponse> result = await _handler.Handle(Command, CancellationToken.None);
+
+        result.Error.Should().Be(UserErrors.InvalidCredentials);
+        _passwordHasher.DidNotReceive().Verify(Arg.Any<string>(), Arg.Any<string?>());
+    }
+
     private void GivenUserFoundByEmail()
     {
         User user = Factories.ActiveUser();

@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
@@ -6,18 +7,13 @@ namespace AuthService.Infrastructure.Security;
 
 public sealed class SigningKeyProvider : IDisposable
 {
+    private const int EphemeralKeySizeBits = 2048;
+
     private readonly RSA _rsa;
 
-    public SigningKeyProvider(IOptions<AuthTokenOptions> options)
+    public SigningKeyProvider(IOptions<AuthTokenOptions> options, ILogger<SigningKeyProvider> logger)
     {
-        _rsa = RSA.Create(2048);
-
-        string? privateKeyPem = options.Value.PrivateKeyPem;
-        if (!string.IsNullOrWhiteSpace(privateKeyPem))
-        {
-            _rsa.ImportFromPem(privateKeyPem);
-        }
-
+        _rsa = CreateKey(options.Value.PrivateKeyPem, logger);
         KeyId = CreateKeyId(_rsa);
     }
 
@@ -43,9 +39,35 @@ public sealed class SigningKeyProvider : IDisposable
 
     public void Dispose() => _rsa.Dispose();
 
+    private static RSA CreateKey(string? privateKeyPem, ILogger logger)
+    {
+        if (string.IsNullOrWhiteSpace(privateKeyPem))
+        {
+            logger.LogWarning(
+                "No signing key configured: using an ephemeral one. Tokens issued now stop validating on restart");
+
+            return RSA.Create(EphemeralKeySizeBits);
+        }
+
+        RSA rsa = RSA.Create();
+
+        try
+        {
+            rsa.ImportFromPem(privateKeyPem);
+        }
+        catch
+        {
+            rsa.Dispose();
+            throw;
+        }
+
+        return rsa;
+    }
+
     private static string CreateKeyId(RSA rsa)
     {
         byte[] hash = SHA256.HashData(rsa.ExportRSAPublicKey());
+
         return Base64UrlEncoder.Encode(hash)[..16];
     }
 }

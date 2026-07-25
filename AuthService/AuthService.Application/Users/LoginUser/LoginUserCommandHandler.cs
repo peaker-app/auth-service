@@ -21,7 +21,7 @@ internal sealed class LoginUserCommandHandler(
         User? user = await ResolveUserAsync(command.Identifier, cancellationToken);
         DateTime utcNow = dateTimeProvider.UtcNow;
 
-        if (user is null || user.IsLockedOut(utcNow) || !passwordHasher.Verify(command.Password, user.PasswordHash))
+        if (user is null || !user.CanSignIn(utcNow) || !passwordHasher.Verify(command.Password, user.PasswordHash))
             return await FailAsync(user, utcNow, cancellationToken);
 
         user.RecordSuccessfulLogin();

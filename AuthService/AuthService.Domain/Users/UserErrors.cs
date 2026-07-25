@@ -37,6 +37,9 @@ public static class UserErrors
     public static readonly Error InvalidCredentials =
         Error.Unauthorized("User.InvalidCredentials", "Las credenciales no son válidas.");
 
+    public static readonly Error AlreadyDeleted =
+        Error.Conflict("User.AlreadyDeleted", "La cuenta ya está dada de baja.");
+
     public static Error NotFound(Guid userId) =>
         Error.NotFound("User.NotFound", $"No existe el usuario {userId}.");
 }

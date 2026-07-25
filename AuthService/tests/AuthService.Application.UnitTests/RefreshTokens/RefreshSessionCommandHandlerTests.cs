@@ -78,4 +78,18 @@ public sealed class RefreshSessionCommandHandlerTests
         firstActive.RevokedAtUtc.Should().Be(Now);
         secondActive.RevokedAtUtc.Should().Be(Now);
     }
+
+    [Fact]
+    public async Task Handle_WhenAccountDeleted_ReturnsInvalidOrExpiredWithoutIssuingTokens()
+    {
+        User user = Factories.DeletedUser();
+        RefreshToken existing = Factories.RefreshTokenFor(user.Id, Now);
+        _refreshTokenRepository.GetByTokenHashAsync("token-hash", Arg.Any<CancellationToken>()).Returns(existing);
+        _userRepository.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+
+        Result<AuthTokensResponse> result = await _handler.Handle(Command, CancellationToken.None);
+
+        result.Error.Should().Be(RefreshTokenErrors.InvalidOrExpired);
+        _tokenIssuer.DidNotReceive().Issue(Arg.Any<User>(), Arg.Any<DateTime>(), Arg.Any<string?>());
+    }
 }

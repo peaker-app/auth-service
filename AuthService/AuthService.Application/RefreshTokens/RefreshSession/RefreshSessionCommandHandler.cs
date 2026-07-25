@@ -30,7 +30,8 @@ internal sealed class RefreshSessionCommandHandler(
             return await RevokeCompromisedSessionsAsync(existing.UserId, utcNow, cancellationToken);
 
         User? user = await userRepository.GetByIdAsync(existing.UserId, cancellationToken);
-        if (user is null) return Result.Failure<AuthTokensResponse>(RefreshTokenErrors.InvalidOrExpired);
+        if (user is null || user.IsDeleted)
+            return Result.Failure<AuthTokensResponse>(RefreshTokenErrors.InvalidOrExpired);
 
         IssuedTokens issued = tokenIssuer.Issue(user, utcNow, command.IpAddress);
         existing.Revoke(utcNow, issued.RefreshToken.Id);

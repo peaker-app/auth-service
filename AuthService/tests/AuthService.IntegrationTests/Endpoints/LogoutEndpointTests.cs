@@ -31,4 +31,17 @@ public sealed class LogoutEndpointTests(AuthServiceApiFactory factory)
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
+
+    [Fact]
+    public async Task Logout_LeavesTheAccessTokenValidUntilItsNaturalExpiry()
+    {
+        RegisteredUser user = await _client.RegisterUserAsync();
+        TokenPair tokens = await _client.LoginWithTokensAsync(user.Email);
+        using HttpResponseMessage first = await _client.LogoutAsync(tokens.AccessToken, tokens.RefreshToken);
+        first.EnsureSuccessStatusCode();
+
+        using HttpResponseMessage second = await _client.LogoutAsync(tokens.AccessToken, tokens.RefreshToken);
+
+        second.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
 }

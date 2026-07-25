@@ -105,4 +105,70 @@ public sealed class UserTests
 
         user.IsLockedOut(Now.AddMinutes(2)).Should().BeFalse();
     }
+
+    [Fact]
+    public void Delete_OnActiveAccount_MarksTheAccountAsDeleted()
+    {
+        User user = UserMother.Registered();
+
+        Result result = user.Delete();
+
+        result.IsSuccess.Should().BeTrue();
+        user.Status.Should().Be(UserStatus.Deleted);
+    }
+
+    [Fact]
+    public void Delete_OnActiveAccount_RaisesUserDeletedDomainEvent()
+    {
+        User user = UserMother.Registered();
+
+        user.Delete();
+
+        user.DomainEvents.OfType<UserDeletedDomainEvent>().Should().ContainSingle()
+            .Which.UserId.Should().Be(user.Id);
+    }
+
+    [Fact]
+    public void Delete_WhenAlreadyDeleted_ReturnsAlreadyDeleted()
+    {
+        User user = UserMother.Deleted();
+
+        Result result = user.Delete();
+
+        result.Error.Should().Be(UserErrors.AlreadyDeleted);
+    }
+
+    [Fact]
+    public void Delete_WhenAlreadyDeleted_DoesNotRaiseTheEventTwice()
+    {
+        User user = UserMother.Deleted();
+
+        user.Delete();
+
+        user.DomainEvents.OfType<UserDeletedDomainEvent>().Should().ContainSingle();
+    }
+
+    [Fact]
+    public void CanSignIn_OnActiveAccount_ReturnsTrue()
+    {
+        User user = UserMother.Registered();
+
+        user.CanSignIn(Now).Should().BeTrue();
+    }
+
+    [Fact]
+    public void CanSignIn_WhenDeleted_ReturnsFalse()
+    {
+        User user = UserMother.Deleted();
+
+        user.CanSignIn(Now).Should().BeFalse();
+    }
+
+    [Fact]
+    public void CanSignIn_WhenLockedOut_ReturnsFalse()
+    {
+        User user = UserMother.WithFailedLogins(User.MaxFailedAttempts, Now);
+
+        user.CanSignIn(Now).Should().BeFalse();
+    }
 }

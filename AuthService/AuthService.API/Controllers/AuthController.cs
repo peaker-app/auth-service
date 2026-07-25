@@ -1,5 +1,6 @@
 using AuthService.API.Requests;
 using AuthService.Application.Authentication;
+using AuthService.Application.Users.DeleteAccount;
 using Common.API.Results;
 using Common.Application.Abstractions;
 using Common.Domain.Results;
@@ -56,6 +57,19 @@ public sealed class AuthController(ISender sender, IUserContext userContext) : C
     public async Task<IActionResult> Logout(LogoutRequest request, CancellationToken cancellationToken)
     {
         Result result = await sender.Send(request.ToCommand(userContext.UserId), cancellationToken);
+
+        return result.ToActionResult();
+    }
+
+    [HttpDelete("me")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DeleteAccount(CancellationToken cancellationToken)
+    {
+        Result result = await sender.Send(new DeleteAccountCommand(userContext.UserId), cancellationToken);
 
         return result.ToActionResult();
     }

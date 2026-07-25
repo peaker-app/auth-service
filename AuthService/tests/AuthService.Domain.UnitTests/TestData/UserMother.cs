@@ -9,6 +9,14 @@ internal static class UserMother
     public static User Registered() =>
         User.Register(TestEmail.Create(), TestUsername.Create(), PasswordHash).Value;
 
+    public static User Deleted()
+    {
+        User user = Registered();
+        user.Delete();
+
+        return user;
+    }
+
     public static User WithFailedLogins(int count, DateTime utcNow)
     {
         User user = Registered();

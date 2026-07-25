@@ -75,6 +75,14 @@ internal static class ApiTestHelpers
         return await client.SendAsync(request);
     }
 
+    public static async Task<HttpResponseMessage> DeleteAccountAsync(this HttpClient client, string accessToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Delete, "/api/auth/me");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        return await client.SendAsync(request);
+    }
+
     public static async Task FailLoginsAsync(this HttpClient client, string identifier, int count)
     {
         for (int attempt = 0; attempt < count; attempt++)

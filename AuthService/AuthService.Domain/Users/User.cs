@@ -52,6 +52,23 @@ public sealed class User : AggregateRoot
 
     public bool IsLockedOut(DateTime utcNow) => LockedUntilUtc is not null && LockedUntilUtc > utcNow;
 
+    public bool IsDeleted => Status is UserStatus.Deleted;
+
+    public bool CanSignIn(DateTime utcNow) => !IsDeleted && !IsLockedOut(utcNow);
+
+    public Result Delete()
+    {
+        if (IsDeleted)
+        {
+            return Result.Failure(UserErrors.AlreadyDeleted);
+        }
+
+        Status = UserStatus.Deleted;
+        Raise(new UserDeletedDomainEvent(Id));
+
+        return Result.Success();
+    }
+
     public void RecordFailedLogin(DateTime utcNow)
     {
         FailedLoginCount++;
