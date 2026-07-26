@@ -1,5 +1,6 @@
 using AuthService.API.Requests;
 using AuthService.Application.Authentication;
+using AuthService.Application.EmailConfirmations.ResendEmailConfirmation;
 using AuthService.Application.Users.DeleteAccount;
 using Common.API.Results;
 using Common.Application.Abstractions;
@@ -46,6 +47,34 @@ public sealed class AuthController(ISender sender, IUserContext userContext) : C
     public async Task<IActionResult> Refresh(RefreshRequest request, CancellationToken cancellationToken)
     {
         Result<AuthTokensResponse> result = await sender.Send(request.ToCommand(ClientIpAddress), cancellationToken);
+
+        return result.ToActionResult();
+    }
+
+    [HttpPost("email/confirm")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ConfirmEmail(ConfirmEmailRequest request, CancellationToken cancellationToken)
+    {
+        Result result = await sender.Send(request.ToCommand(), cancellationToken);
+
+        return result.ToActionResult();
+    }
+
+    [HttpPost("email/resend")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<IActionResult> ResendEmailConfirmation(CancellationToken cancellationToken)
+    {
+        Result result = await sender.Send(
+            new ResendEmailConfirmationCommand(userContext.UserId), cancellationToken);
 
         return result.ToActionResult();
     }
