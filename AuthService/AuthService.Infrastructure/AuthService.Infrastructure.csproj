@@ -16,4 +16,8 @@
       <PackageReference Include="MySql.EntityFrameworkCore" />
     </ItemGroup>
 
+    <ItemGroup>
+        <InternalsVisibleTo Include="AuthService.IntegrationTests" />
+    </ItemGroup>
+
 </Project>

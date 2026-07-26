@@ -1,3 +1,4 @@
+using AuthService.Domain.EmailConfirmations;
 using AuthService.Domain.RefreshTokens;
 using AuthService.Domain.Users;
 using Common.Application.Abstractions;
@@ -12,6 +13,8 @@ public sealed class AuthDbContext(DbContextOptions<AuthDbContext> options) : DbC
     public DbSet<User> Users => Set<User>();
 
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
+    public DbSet<EmailConfirmationToken> EmailConfirmationTokens => Set<EmailConfirmationToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

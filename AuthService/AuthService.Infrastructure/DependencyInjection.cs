@@ -1,4 +1,5 @@
 using AuthService.Application.Abstractions;
+using AuthService.Domain.EmailConfirmations;
 using AuthService.Domain.RefreshTokens;
 using AuthService.Domain.Users;
 using AuthService.Domain.Users.Events;
@@ -16,6 +17,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace AuthService.Infrastructure;
 
@@ -26,6 +28,7 @@ public static class DependencyInjection
         services.AddPersistence(configuration);
         services.AddSecurity(configuration);
         services.AddBreachedPasswordChecker();
+        services.AddConfirmationEmailSender(configuration);
         services.AddEventBus(configuration);
 
         return services;
@@ -67,8 +70,18 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<AuthDbContext>());
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IEmailConfirmationTokenRepository, EmailConfirmationTokenRepository>();
+        services.AddDomainEventHandlers();
+    }
+
+    private static void AddDomainEventHandlers(this IServiceCollection services)
+    {
         services.AddScoped<IDomainEventHandler<UserRegisteredDomainEvent>, UserRegisteredDomainEventHandler>();
         services.AddScoped<IDomainEventHandler<UserDeletedDomainEvent>, UserDeletedDomainEventHandler>();
+        services.AddScoped<IDomainEventHandler<UserEmailConfirmedDomainEvent>, UserEmailConfirmedDomainEventHandler>();
+        services.AddScoped<
+            IDomainEventHandler<EmailConfirmationRequestedDomainEvent>,
+            EmailConfirmationRequestedDomainEventHandler>();
     }
 
     private static void AddSecurity(this IServiceCollection services, IConfiguration configuration)
@@ -79,6 +92,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher, Argon2IdPasswordHasher>();
         services.AddScoped<IAccessTokenGenerator, RsaJwtTokenGenerator>();
         services.AddScoped<IRefreshTokenGenerator, RefreshTokenGenerator>();
+        services.AddScoped<IEmailConfirmationTokenGenerator, EmailConfirmationTokenGenerator>();
     }
 
     private static void AddAuthTokenOptions(this IServiceCollection services, IConfiguration configuration) =>
@@ -90,6 +104,42 @@ public static class DependencyInjection
                 $"'{AuthTokenOptions.SectionName}:{nameof(AuthTokenOptions.PrivateKeyPem)}' es obligatorio fuera de " +
                 "Development: sin él cada réplica firmaría con una clave distinta y efímera.")
             .ValidateOnStart();
+
+    private static void AddConfirmationEmailSender(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddEmailConfirmationOptions(configuration);
+
+        string? apiKey = configuration
+            .GetSection(EmailConfirmationOptions.SectionName)
+            .GetValue<string>(nameof(EmailConfirmationOptions.ApiKey));
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            services.AddScoped<IConfirmationEmailSender, LoggingConfirmationEmailSender>();
+            return;
+        }
+
+        services.AddHttpClient<IConfirmationEmailSender, ResendConfirmationEmailSender>(ConfigureResendClient)
+            .AddStandardResilienceHandler();
+    }
+
+    private static void AddEmailConfirmationOptions(this IServiceCollection services, IConfiguration configuration) =>
+        services.AddOptions<EmailConfirmationOptions>()
+            .Bind(configuration.GetSection(EmailConfirmationOptions.SectionName))
+            .ValidateDataAnnotations()
+            .Validate<IHostEnvironment>(
+                (options, environment) => environment.IsDevelopment() || options.HasApiKey,
+                $"'{EmailConfirmationOptions.SectionName}:{nameof(EmailConfirmationOptions.ApiKey)}' es obligatorio " +
+                "fuera de Development: sin él no se envía el correo de confirmación de RF-AUT-02.")
+            .ValidateOnStart();
+
+    private static void ConfigureResendClient(IServiceProvider provider, HttpClient client)
+    {
+        EmailConfirmationOptions options = provider.GetRequiredService<IOptions<EmailConfirmationOptions>>().Value;
+
+        client.BaseAddress = new Uri("https://api.resend.com/");
+        client.Timeout = options.RequestTimeout;
+    }
 
     private static void AddBreachedPasswordChecker(this IServiceCollection services) =>
         services.AddHttpClient<IBreachedPasswordChecker, HibpBreachedPasswordChecker>(client =>
