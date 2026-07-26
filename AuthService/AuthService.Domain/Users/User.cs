@@ -46,8 +46,22 @@ public sealed class User : AggregateRoot
 
         User user = new(Guid.CreateVersion7(), email, username, passwordHash);
         user.Raise(new UserRegisteredDomainEvent(user.Id, email.Value, username.Value));
+        user.Raise(new EmailConfirmationRequestedDomainEvent(user.Id));
 
         return user;
+    }
+
+    public Result ConfirmEmail()
+    {
+        if (EmailConfirmed)
+        {
+            return Result.Failure(UserErrors.EmailAlreadyConfirmed);
+        }
+
+        EmailConfirmed = true;
+        Raise(new UserEmailConfirmedDomainEvent(Id));
+
+        return Result.Success();
     }
 
     public bool IsLockedOut(DateTime utcNow) => LockedUntilUtc is not null && LockedUntilUtc > utcNow;

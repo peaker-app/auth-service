@@ -34,8 +34,7 @@ public sealed class UserTests
     {
         Result<User> result = User.Register(TestEmail.Create(), TestUsername.Create(), UserMother.PasswordHash);
 
-        result.Value.DomainEvents.Should().ContainSingle()
-            .Which.Should().BeOfType<UserRegisteredDomainEvent>()
+        result.Value.DomainEvents.OfType<UserRegisteredDomainEvent>().Should().ContainSingle()
             .Which.Username.Should().Be(TestUsername.Raw);
     }
 
@@ -46,9 +45,59 @@ public sealed class UserTests
 
         Result<User> result = User.Register(email, TestUsername.Create(), UserMother.PasswordHash);
 
-        result.Value.DomainEvents.Should().ContainSingle()
-            .Which.Should().BeOfType<UserRegisteredDomainEvent>()
+        result.Value.DomainEvents.OfType<UserRegisteredDomainEvent>().Should().ContainSingle()
             .Which.Email.Should().Be(email.Value);
+    }
+
+    [Fact]
+    public void Register_RaisesEmailConfirmationRequestedDomainEvent()
+    {
+        Result<User> result = User.Register(TestEmail.Create(), TestUsername.Create(), UserMother.PasswordHash);
+
+        result.Value.DomainEvents.OfType<EmailConfirmationRequestedDomainEvent>().Should().ContainSingle()
+            .Which.UserId.Should().Be(result.Value.Id);
+    }
+
+    [Fact]
+    public void ConfirmEmail_OnUnconfirmedAccount_MarksTheEmailAsConfirmed()
+    {
+        User user = UserMother.Registered();
+
+        Result result = user.ConfirmEmail();
+
+        result.IsSuccess.Should().BeTrue();
+        user.EmailConfirmed.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ConfirmEmail_OnUnconfirmedAccount_RaisesUserEmailConfirmedDomainEvent()
+    {
+        User user = UserMother.Registered();
+
+        user.ConfirmEmail();
+
+        user.DomainEvents.OfType<UserEmailConfirmedDomainEvent>().Should().ContainSingle()
+            .Which.UserId.Should().Be(user.Id);
+    }
+
+    [Fact]
+    public void ConfirmEmail_WhenAlreadyConfirmed_ReturnsEmailAlreadyConfirmed()
+    {
+        User user = UserMother.Confirmed();
+
+        Result result = user.ConfirmEmail();
+
+        result.Error.Should().Be(UserErrors.EmailAlreadyConfirmed);
+    }
+
+    [Fact]
+    public void ConfirmEmail_WhenAlreadyConfirmed_DoesNotRaiseTheEventTwice()
+    {
+        User user = UserMother.Confirmed();
+
+        user.ConfirmEmail();
+
+        user.DomainEvents.OfType<UserEmailConfirmedDomainEvent>().Should().ContainSingle();
     }
 
     [Fact]

@@ -37,6 +37,9 @@ public static class UserErrors
     public static readonly Error InvalidCredentials =
         Error.Unauthorized("User.InvalidCredentials", "Las credenciales no son válidas.");
 
+    public static readonly Error EmailAlreadyConfirmed =
+        Error.Conflict("User.EmailAlreadyConfirmed", "El correo electrónico ya está confirmado.");
+
     public static readonly Error AlreadyDeleted =
         Error.Conflict("User.AlreadyDeleted", "La cuenta ya está dada de baja.");
 
