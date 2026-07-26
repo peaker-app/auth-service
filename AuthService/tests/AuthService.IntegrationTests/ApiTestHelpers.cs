@@ -75,6 +75,23 @@ internal static class ApiTestHelpers
         return await client.SendAsync(request);
     }
 
+    public static Task<HttpResponseMessage> ConfirmEmailAsync(this HttpClient client, string token) =>
+        client.PostAsJsonAsync("/api/auth/email/confirm", new { token });
+
+    public static async Task<HttpResponseMessage> ResendConfirmationAsync(
+        this HttpClient client,
+        string? accessToken = null)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/email/resend");
+
+        if (accessToken is not null)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        }
+
+        return await client.SendAsync(request);
+    }
+
     public static async Task<HttpResponseMessage> DeleteAccountAsync(this HttpClient client, string accessToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Delete, "/api/auth/me");
