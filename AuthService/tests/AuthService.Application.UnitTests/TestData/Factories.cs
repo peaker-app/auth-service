@@ -1,4 +1,5 @@
 using AuthService.Application.Authentication;
+using AuthService.Domain.EmailConfirmations;
 using AuthService.Domain.RefreshTokens;
 using AuthService.Domain.Users;
 
@@ -27,6 +28,14 @@ internal static class Factories
         return user;
     }
 
+    public static User ConfirmedUser()
+    {
+        User user = ActiveUser();
+        user.ConfirmEmail();
+
+        return user;
+    }
+
     public static User DeletedUser()
     {
         User user = ActiveUser();
@@ -40,4 +49,11 @@ internal static class Factories
 
     public static IssuedTokens IssuedFor(RefreshToken refreshToken) =>
         new(new AuthTokensResponse("access-token", "raw-refresh-token", 900, "Bearer"), refreshToken);
+
+    public static EmailConfirmationToken ConfirmationTokenFor(Guid userId, DateTime issuedAtUtc) =>
+        EmailConfirmationToken.Issue(new EmailConfirmationTokenDraft(
+            userId,
+            "confirmation-hash",
+            issuedAtUtc,
+            issuedAtUtc.AddHours(24)));
 }

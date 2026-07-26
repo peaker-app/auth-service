@@ -1,4 +1,5 @@
 using AuthService.Application.Authentication;
+using AuthService.Application.EmailConfirmations;
 using Common.Application.Behaviors;
 using FluentValidation;
 using MediatR;
@@ -20,6 +21,7 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, includeInternalTypes: true);
 
         services.AddScoped<IAuthTokenIssuer, AuthTokenIssuer>();
+        services.AddScoped<IEmailConfirmationIssuer, EmailConfirmationIssuer>();
 
         return services;
     }
