@@ -5,16 +5,19 @@ using MassTransit;
 
 namespace AuthService.Infrastructure.Messaging;
 
-internal sealed class UserEmailConfirmedDomainEventHandler(
-    IPublishEndpoint publishEndpoint,
-    IDateTimeProvider dateTimeProvider) : IDomainEventHandler<UserEmailConfirmedDomainEvent>
+internal sealed class UserEmailConfirmedDomainEventHandler(IPublishEndpoint publishEndpoint)
+    : IDomainEventHandler<UserEmailConfirmedDomainEvent>
 {
-    public Task Handle(UserEmailConfirmedDomainEvent domainEvent, CancellationToken cancellationToken) =>
+    public Task Handle(
+        UserEmailConfirmedDomainEvent domainEvent,
+        DomainEventContext context,
+        CancellationToken cancellationToken) =>
         publishEndpoint.Publish(
             new UserEmailConfirmed
             {
-                UserId = domainEvent.UserId,
-                OccurredAtUtc = dateTimeProvider.UtcNow
+                MessageId = context.MessageId,
+                OccurredAtUtc = context.OccurredAtUtc,
+                UserId = domainEvent.UserId
             },
             cancellationToken);
 }

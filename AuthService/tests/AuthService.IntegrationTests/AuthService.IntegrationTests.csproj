@@ -18,6 +18,7 @@
       <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
       <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
       <PackageReference Include="Microsoft.NET.Test.Sdk" />
+      <PackageReference Include="NSubstitute" />
       <PackageReference Include="Testcontainers.MySql" />
       <PackageReference Include="Testcontainers.RabbitMq" />
       <PackageReference Include="xunit" />

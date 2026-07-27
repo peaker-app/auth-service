@@ -30,7 +30,11 @@ public sealed class RefreshToken : AggregateRoot
 
     public static RefreshToken Issue(RefreshTokenDraft draft) => new(Guid.CreateVersion7(), draft);
 
-    public bool IsActive(DateTime utcNow) => RevokedAtUtc is null && ExpiresAtUtc > utcNow;
+    public bool IsRevoked => RevokedAtUtc is not null;
+
+    public bool IsExpired(DateTime utcNow) => ExpiresAtUtc <= utcNow;
+
+    public bool IsActive(DateTime utcNow) => !IsRevoked && !IsExpired(utcNow);
 
     public void Revoke(DateTime utcNow, Guid? replacedById = null)
     {

@@ -80,6 +80,22 @@ public sealed class RefreshSessionCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WithNaturallyExpiredToken_DoesNotRevokeTheOtherSessions()
+    {
+        Guid userId = Guid.CreateVersion7();
+        RefreshToken expired = Factories.RefreshTokenFor(userId, Now.AddDays(-8));
+        RefreshToken activeOnAnotherDevice = Factories.RefreshTokenFor(userId, Now);
+        _refreshTokenRepository.GetByTokenHashAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(expired);
+        _refreshTokenRepository.GetActiveByUserAsync(userId, Arg.Any<CancellationToken>())
+            .Returns([activeOnAnotherDevice]);
+
+        Result<AuthTokensResponse> result = await _handler.Handle(Command, CancellationToken.None);
+
+        result.Error.Should().Be(RefreshTokenErrors.InvalidOrExpired);
+        activeOnAnotherDevice.RevokedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Handle_WhenAccountDeleted_ReturnsInvalidOrExpiredWithoutIssuingTokens()
     {
         User user = Factories.DeletedUser();

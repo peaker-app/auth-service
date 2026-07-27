@@ -104,25 +104,36 @@ public sealed class LoginUserCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenAccountLocked_ReturnsInvalidCredentialsWithoutVerifying()
+    public async Task Handle_WhenAccountLocked_StillVerifiesThePasswordToKeepTheTimingConstant()
     {
         _userRepository.GetByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns(Factories.LockedUser(Now));
 
         Result<AuthTokensResponse> result = await _handler.Handle(Command, CancellationToken.None);
 
         result.Error.Should().Be(UserErrors.InvalidCredentials);
-        _passwordHasher.DidNotReceive().Verify(Arg.Any<string>(), Arg.Any<string?>());
+        _passwordHasher.Received(1).Verify(Command.Password, Factories.DefaultHash);
     }
 
     [Fact]
-    public async Task Handle_WhenAccountDeleted_ReturnsInvalidCredentialsWithoutVerifying()
+    public async Task Handle_WhenAccountDeleted_StillVerifiesThePasswordToKeepTheTimingConstant()
     {
         _userRepository.GetByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns(Factories.DeletedUser());
 
         Result<AuthTokensResponse> result = await _handler.Handle(Command, CancellationToken.None);
 
         result.Error.Should().Be(UserErrors.InvalidCredentials);
-        _passwordHasher.DidNotReceive().Verify(Arg.Any<string>(), Arg.Any<string?>());
+        _passwordHasher.Received(1).Verify(Command.Password, Factories.DefaultHash);
+    }
+
+    [Fact]
+    public async Task Handle_WithUnknownIdentifier_StillVerifiesThePasswordToKeepTheTimingConstant()
+    {
+        _userRepository.GetByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns((User?)null);
+
+        Result<AuthTokensResponse> result = await _handler.Handle(Command, CancellationToken.None);
+
+        result.Error.Should().Be(UserErrors.InvalidCredentials);
+        _passwordHasher.Received(1).Verify(Command.Password, null);
     }
 
     private void GivenUserFoundByEmail()

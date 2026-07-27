@@ -11,6 +11,7 @@ internal sealed class EmailConfirmationRequestedDomainEventHandler(ISender sende
 {
     public async Task Handle(
         EmailConfirmationRequestedDomainEvent domainEvent,
+        DomainEventContext context,
         CancellationToken cancellationToken)
     {
         Result result = await sender.Send(new IssueEmailConfirmationCommand(domainEvent.UserId), cancellationToken);

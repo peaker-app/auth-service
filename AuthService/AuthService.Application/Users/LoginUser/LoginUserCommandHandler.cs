@@ -21,7 +21,11 @@ internal sealed class LoginUserCommandHandler(
         User? user = await ResolveUserAsync(command.Identifier, cancellationToken);
         DateTime utcNow = dateTimeProvider.UtcNow;
 
-        if (user is null || !user.CanSignIn(utcNow) || !passwordHasher.Verify(command.Password, user.PasswordHash))
+        // Motivo: la verificación se ejecuta siempre, incluso sin usuario o con la cuenta bloqueada,
+        // para que el fallo tarde lo mismo en los tres casos (DESIGN.md §4.3).
+        bool passwordMatches = passwordHasher.Verify(command.Password, user?.PasswordHash);
+
+        if (user is null || !passwordMatches || !user.CanSignIn(utcNow))
             return await FailAsync(user, utcNow, cancellationToken);
 
         user.RecordSuccessfulLogin();

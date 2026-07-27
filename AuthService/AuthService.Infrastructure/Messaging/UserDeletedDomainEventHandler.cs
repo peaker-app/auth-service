@@ -5,16 +5,19 @@ using MassTransit;
 
 namespace AuthService.Infrastructure.Messaging;
 
-internal sealed class UserDeletedDomainEventHandler(
-    IPublishEndpoint publishEndpoint,
-    IDateTimeProvider dateTimeProvider) : IDomainEventHandler<UserDeletedDomainEvent>
+internal sealed class UserDeletedDomainEventHandler(IPublishEndpoint publishEndpoint)
+    : IDomainEventHandler<UserDeletedDomainEvent>
 {
-    public Task Handle(UserDeletedDomainEvent domainEvent, CancellationToken cancellationToken) =>
+    public Task Handle(
+        UserDeletedDomainEvent domainEvent,
+        DomainEventContext context,
+        CancellationToken cancellationToken) =>
         publishEndpoint.Publish(
             new UserDeleted
             {
-                UserId = domainEvent.UserId,
-                OccurredAtUtc = dateTimeProvider.UtcNow
+                MessageId = context.MessageId,
+                OccurredAtUtc = context.OccurredAtUtc,
+                UserId = domainEvent.UserId
             },
             cancellationToken);
 }

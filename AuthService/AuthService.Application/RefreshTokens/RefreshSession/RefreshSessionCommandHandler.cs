@@ -26,8 +26,13 @@ internal sealed class RefreshSessionCommandHandler(
 
         if (existing is null) return Result.Failure<AuthTokensResponse>(RefreshTokenErrors.InvalidOrExpired);
 
-        if (!existing.IsActive(utcNow))
+        // Motivo: solo la reutilización de un token ya revocado delata un compromiso de la sesión.
+        // La caducidad natural es uso normal y no puede arrastrar las sesiones de otros dispositivos.
+        if (existing.IsRevoked)
             return await RevokeCompromisedSessionsAsync(existing.UserId, utcNow, cancellationToken);
+
+        if (existing.IsExpired(utcNow))
+            return Result.Failure<AuthTokensResponse>(RefreshTokenErrors.InvalidOrExpired);
 
         User? user = await userRepository.GetByIdAsync(existing.UserId, cancellationToken);
         if (user is null || user.IsDeleted)
