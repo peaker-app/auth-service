@@ -1,7 +1,7 @@
 using System.Globalization;
 using AuthService.Application.Abstractions;
-using AuthService.IntegrationTests.Fakes;
 using AuthService.Infrastructure.Persistence;
+using AuthService.IntegrationTests.Fakes;
 using Common.Infrastructure.Persistence.Outbox;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;

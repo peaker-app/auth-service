@@ -1,4 +1,5 @@
 using AuthService.Domain.Users;
+using Common.Domain.Results;
 using FluentAssertions;
 using Xunit;
 
@@ -11,7 +12,7 @@ public sealed class EmailTests
     [InlineData("  USER@Test.Com  ", "user@test.com")]
     public void Create_WithValidEmail_NormalizesToLowercaseAndTrimmed(string raw, string expected)
     {
-        Common.Domain.Results.Result<Email> result = Email.Create(raw);
+        Result<Email> result = Email.Create(raw);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Value.Should().Be(expected);
@@ -20,7 +21,7 @@ public sealed class EmailTests
     [Fact]
     public void Create_WithNullOrWhitespace_ReturnsEmailEmpty()
     {
-        Common.Domain.Results.Result<Email> result = Email.Create("   ");
+        Result<Email> result = Email.Create("   ");
 
         result.Error.Should().Be(UserErrors.EmailEmpty);
     }
@@ -31,7 +32,7 @@ public sealed class EmailTests
     [InlineData("@no-local.com")]
     public void Create_WithInvalidFormat_ReturnsEmailInvalid(string raw)
     {
-        Common.Domain.Results.Result<Email> result = Email.Create(raw);
+        Result<Email> result = Email.Create(raw);
 
         result.Error.Should().Be(UserErrors.EmailInvalid);
     }
@@ -41,7 +42,7 @@ public sealed class EmailTests
     {
         string raw = new string('a', Email.MaxLength) + "@peaker.io";
 
-        Common.Domain.Results.Result<Email> result = Email.Create(raw);
+        Result<Email> result = Email.Create(raw);
 
         result.Error.Should().Be(UserErrors.EmailTooLong);
     }

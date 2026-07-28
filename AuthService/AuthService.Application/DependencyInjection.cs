@@ -2,7 +2,6 @@ using AuthService.Application.Authentication;
 using AuthService.Application.EmailConfirmations;
 using Common.Application.Behaviors;
 using FluentValidation;
-using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AuthService.Application;

@@ -7,7 +7,6 @@ using Common.Application.Abstractions;
 using Common.Domain.Results;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AuthService.API.Controllers;

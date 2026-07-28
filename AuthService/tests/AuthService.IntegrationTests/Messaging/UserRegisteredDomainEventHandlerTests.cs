@@ -2,7 +2,6 @@ using AuthService.Domain.Users.Events;
 using AuthService.Infrastructure.Messaging;
 using Common.Application.Abstractions;
 using Common.Contracts.Users;
-using FluentAssertions;
 using MassTransit;
 using NSubstitute;
 using Xunit;
