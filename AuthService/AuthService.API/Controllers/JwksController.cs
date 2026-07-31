@@ -12,24 +12,22 @@ public sealed class JwksController(ITokenMetadataProvider tokenMetadataProvider)
 
     [HttpGet("jwks.json")]
     [AllowAnonymous]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public IActionResult GetJsonWebKeySet() => Ok(new { keys = tokenMetadataProvider.GetSigningKeys() });
+    [ProducesResponseType(typeof(JsonWebKeySetResponse), StatusCodes.Status200OK)]
+    public IActionResult GetJsonWebKeySet() => Ok(new JsonWebKeySetResponse(tokenMetadataProvider.GetSigningKeys()));
 
     [HttpGet("openid-configuration")]
     [AllowAnonymous]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(OpenIdConfigurationResponse), StatusCodes.Status200OK)]
     public IActionResult GetOpenIdConfiguration()
     {
         string baseUrl = $"{Request.Scheme}://{Request.Host}";
 
-        var configuration = new
-        {
-            issuer = tokenMetadataProvider.Issuer,
-            jwks_uri = $"{baseUrl}/.well-known/jwks.json",
-            id_token_signing_alg_values_supported = new[] { SigningAlgorithm },
-            response_types_supported = new[] { "token" },
-            subject_types_supported = new[] { "public" }
-        };
+        OpenIdConfigurationResponse configuration = new(
+            tokenMetadataProvider.Issuer,
+            new Uri($"{baseUrl}/.well-known/jwks.json"),
+            [SigningAlgorithm],
+            ["token"],
+            ["public"]);
 
         return Ok(configuration);
     }

@@ -94,7 +94,7 @@ public sealed class LoginEndpointTests(AuthServiceApiFactory factory)
         RegisteredUser user = await _client.RegisterUserAsync();
         TokenPair tokens = await _client.LoginWithTokensAsync(user.Email);
 
-        var accessToken = new JsonWebToken(tokens.AccessToken);
+        JsonWebToken accessToken = new(tokens.AccessToken);
 
         accessToken.Claims.Select(claim => claim.Type)
             .Should().Contain(["sub", "email", "jti", "iat", "exp", "iss", "aud"]);
@@ -106,7 +106,7 @@ public sealed class LoginEndpointTests(AuthServiceApiFactory factory)
         RegisteredUser user = await _client.RegisterUserAsync();
         TokenPair tokens = await _client.LoginWithTokensAsync(user.Email);
 
-        var accessToken = new JsonWebToken(tokens.AccessToken);
+        JsonWebToken accessToken = new(tokens.AccessToken);
 
         accessToken.Claims.Select(claim => claim.Type).Should().NotContain("username");
         accessToken.Claims.Select(claim => claim.Value).Should().NotContain(user.Username);

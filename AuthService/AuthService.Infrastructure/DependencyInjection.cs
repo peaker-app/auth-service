@@ -27,7 +27,7 @@ public static class DependencyInjection
     {
         services.AddPersistence(configuration);
         services.AddSecurity(configuration);
-        services.AddBreachedPasswordChecker();
+        services.AddBreachedPasswordChecker(configuration);
         services.AddConfirmationEmailSender(configuration);
         services.AddEventBus(configuration);
 
@@ -137,15 +137,26 @@ public static class DependencyInjection
     {
         EmailConfirmationOptions options = provider.GetRequiredService<IOptions<EmailConfirmationOptions>>().Value;
 
-        client.BaseAddress = new Uri("https://api.resend.com/");
+        client.BaseAddress = options.BaseAddress;
         client.Timeout = options.RequestTimeout;
     }
 
-    private static void AddBreachedPasswordChecker(this IServiceCollection services) =>
-        services.AddHttpClient<IBreachedPasswordChecker, HibpBreachedPasswordChecker>(client =>
-            {
-                client.BaseAddress = new Uri("https://api.pwnedpasswords.com/");
-                client.Timeout = TimeSpan.FromSeconds(5);
-            })
+    private static void AddBreachedPasswordChecker(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<BreachedPasswordOptions>()
+            .Bind(configuration.GetSection(BreachedPasswordOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        services.AddHttpClient<IBreachedPasswordChecker, HibpBreachedPasswordChecker>(ConfigureBreachedPasswordClient)
             .AddStandardResilienceHandler();
+    }
+
+    private static void ConfigureBreachedPasswordClient(IServiceProvider provider, HttpClient client)
+    {
+        BreachedPasswordOptions options = provider.GetRequiredService<IOptions<BreachedPasswordOptions>>().Value;
+
+        client.BaseAddress = options.BaseAddress;
+        client.Timeout = options.RequestTimeout;
+    }
 }

@@ -2,6 +2,7 @@ using AuthService.API.Extensions;
 using AuthService.Application;
 using AuthService.Infrastructure;
 using AuthService.Infrastructure.Persistence;
+using Common.API.Documentation;
 using Common.API.Health;
 using Common.API.Middlewares;
 using Common.API.Security;
@@ -22,8 +23,7 @@ builder.Services.AddScoped<IUserContext, UserContext>();
 builder.Services.AddLocalJwtAuthentication();
 
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddCommonSwagger("auth-service");
 
 builder.Services.AddHealthChecks().AddDbContextCheck<AuthDbContext>();
 
@@ -46,5 +46,3 @@ app.MapControllers();
 app.MapCommonHealthChecks();
 
 await app.RunAsync();
-
-public partial class Program;

@@ -66,7 +66,7 @@ internal static class ApiTestHelpers
         string accessToken,
         string refreshToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/logout")
+        using HttpRequestMessage request = new(HttpMethod.Post, "/api/auth/logout")
         {
             Content = JsonContent.Create(new { refreshToken })
         };
@@ -82,7 +82,7 @@ internal static class ApiTestHelpers
         this HttpClient client,
         string? accessToken = null)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/email/resend");
+        using HttpRequestMessage request = new(HttpMethod.Post, "/api/auth/email/resend");
 
         if (accessToken is not null)
         {
@@ -94,7 +94,7 @@ internal static class ApiTestHelpers
 
     public static async Task<HttpResponseMessage> DeleteAccountAsync(this HttpClient client, string accessToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Delete, "/api/auth/me");
+        using HttpRequestMessage request = new(HttpMethod.Delete, "/api/auth/me");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
         return await client.SendAsync(request);

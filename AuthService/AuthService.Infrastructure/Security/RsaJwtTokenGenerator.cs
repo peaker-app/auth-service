@@ -20,7 +20,7 @@ internal sealed class RsaJwtTokenGenerator(
         DateTime issuedAt = dateTimeProvider.UtcNow;
         DateTime expiresAt = issuedAt.Add(settings.AccessTokenLifetime);
 
-        var descriptor = new SecurityTokenDescriptor
+        SecurityTokenDescriptor descriptor = new()
         {
             Issuer = settings.Issuer,
             Audience = settings.Audience,

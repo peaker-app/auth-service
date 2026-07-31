@@ -97,7 +97,7 @@ public sealed class AuthServiceApiFactory : WebApplicationFactory<Program>, IAsy
 
     private Dictionary<string, string?> BuildSettings()
     {
-        var rabbitUri = new Uri(_rabbitMq.GetConnectionString());
+        Uri rabbitUri = new(_rabbitMq.GetConnectionString());
         string[] credentials = rabbitUri.UserInfo.Split(':');
 
         return new Dictionary<string, string?>

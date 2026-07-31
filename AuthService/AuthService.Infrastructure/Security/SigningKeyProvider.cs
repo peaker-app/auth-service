@@ -28,7 +28,7 @@ public sealed class SigningKeyProvider : IDisposable
     public JsonWebKey CreatePublicJsonWebKey()
     {
         RSAParameters publicParameters = _rsa.ExportParameters(includePrivateParameters: false);
-        var publicKey = new RsaSecurityKey(publicParameters) { KeyId = KeyId };
+        RsaSecurityKey publicKey = new(publicParameters) { KeyId = KeyId };
 
         JsonWebKey jsonWebKey = JsonWebKeyConverter.ConvertFromRSASecurityKey(publicKey);
         jsonWebKey.Use = "sig";

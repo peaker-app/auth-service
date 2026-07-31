@@ -9,6 +9,9 @@ public sealed class EmailConfirmationOptions
     public string? ApiKey { get; init; }
 
     [Required]
+    public Uri BaseAddress { get; init; } = new("https://api.resend.com/");
+
+    [Required]
     public string FromAddress { get; init; } = "no-reply@peaker.io";
 
     [Required]

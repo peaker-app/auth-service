@@ -35,7 +35,7 @@ internal sealed class ResendConfirmationEmailSender(
     {
         EmailConfirmationOptions settings = options.Value;
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, SendEmailPath)
+        using HttpRequestMessage request = new(HttpMethod.Post, SendEmailPath)
         {
             Content = JsonContent.Create(
                 ResendEmailRequest.Confirmation(settings, recipientEmail, rawToken), options: SerializerOptions)
