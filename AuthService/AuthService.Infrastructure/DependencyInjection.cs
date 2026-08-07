@@ -108,38 +108,30 @@ public static class DependencyInjection
     private static void AddConfirmationEmailSender(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddEmailConfirmationOptions(configuration);
-
-        string? apiKey = configuration
-            .GetSection(EmailConfirmationOptions.SectionName)
-            .GetValue<string>(nameof(EmailConfirmationOptions.ApiKey));
-
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            services.AddScoped<IConfirmationEmailSender, LoggingConfirmationEmailSender>();
-            return;
-        }
-
-        services.AddHttpClient<IConfirmationEmailSender, ResendConfirmationEmailSender>(ConfigureResendClient)
-            .AddStandardResilienceHandler();
+        services.AddSmtpOptions(configuration);
+        services.AddScoped<IConfirmationEmailSender, SmtpConfirmationEmailSender>();
     }
 
     private static void AddEmailConfirmationOptions(this IServiceCollection services, IConfiguration configuration) =>
         services.AddOptions<EmailConfirmationOptions>()
             .Bind(configuration.GetSection(EmailConfirmationOptions.SectionName))
             .ValidateDataAnnotations()
-            .Validate<IHostEnvironment>(
-                (options, environment) => environment.IsDevelopment() || options.HasApiKey,
-                $"'{EmailConfirmationOptions.SectionName}:{nameof(EmailConfirmationOptions.ApiKey)}' es obligatorio " +
-                "fuera de Development: sin él no se envía el correo de confirmación de RF-AUT-02.")
             .ValidateOnStart();
 
-    private static void ConfigureResendClient(IServiceProvider provider, HttpClient client)
-    {
-        EmailConfirmationOptions options = provider.GetRequiredService<IOptions<EmailConfirmationOptions>>().Value;
-
-        client.BaseAddress = options.BaseAddress;
-        client.Timeout = options.RequestTimeout;
-    }
+    private static void AddSmtpOptions(this IServiceCollection services, IConfiguration configuration) =>
+        services.AddOptions<SmtpOptions>()
+            .Bind(configuration.GetSection(SmtpOptions.SectionName))
+            .ValidateDataAnnotations()
+            .Validate<IHostEnvironment>(
+                (options, environment) => environment.IsDevelopment() || options.IsEncrypted,
+                $"'{SmtpOptions.SectionName}:{nameof(SmtpOptions.Security)}' debe ser StartTls o SslOnConnect fuera " +
+                "de Development: el correo de confirmación de RF-AUT-02 no puede viajar en claro.")
+            .Validate<IHostEnvironment>(
+                (options, environment) => environment.IsDevelopment() || options.HasCredentials,
+                $"'{SmtpOptions.SectionName}:{nameof(SmtpOptions.Username)}' y " +
+                $"'{SmtpOptions.SectionName}:{nameof(SmtpOptions.Password)}' son obligatorios fuera de Development: " +
+                "el relay SMTP rechaza los envíos sin autenticar.")
+            .ValidateOnStart();
 
     private static void AddBreachedPasswordChecker(this IServiceCollection services, IConfiguration configuration)
     {

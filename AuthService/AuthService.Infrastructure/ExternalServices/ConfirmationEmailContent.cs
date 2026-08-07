@@ -1,26 +1,34 @@
 using System.Globalization;
 using System.Net;
+using MimeKit;
 
 namespace AuthService.Infrastructure.ExternalServices;
 
-internal sealed record ResendEmailRequest(string From, string[] To, string Subject, string Html, string Text)
+internal sealed record ConfirmationEmailContent(string Subject, string Html, string Text)
 {
     private const string ConfirmationSubject = "Confirma tu correo en Peaker";
 
-    public static ResendEmailRequest Confirmation(
-        EmailConfirmationOptions options,
-        string recipientEmail,
-        string rawToken)
+    public static ConfirmationEmailContent For(EmailConfirmationOptions options, string rawToken)
     {
         string url = options.BuildConfirmationUri(rawToken).AbsoluteUri;
         string hours = options.TokenLifetime.TotalHours.ToString("0", CultureInfo.InvariantCulture);
 
-        return new ResendEmailRequest(
-            $"{options.FromName} <{options.FromAddress}>",
-            [recipientEmail],
-            ConfirmationSubject,
-            BuildHtml(url, hours),
-            BuildText(url, hours));
+        return new ConfirmationEmailContent(ConfirmationSubject, BuildHtml(url, hours), BuildText(url, hours));
+    }
+
+    public static MimeMessage ToMimeMessage(
+        EmailConfirmationOptions options,
+        string recipientEmail,
+        string rawToken)
+    {
+        ConfirmationEmailContent content = For(options, rawToken);
+
+        MimeMessage message = new() { Subject = content.Subject };
+        message.From.Add(new MailboxAddress(options.FromName, options.FromAddress));
+        message.To.Add(MailboxAddress.Parse(recipientEmail));
+        message.Body = new BodyBuilder { HtmlBody = content.Html, TextBody = content.Text }.ToMessageBody();
+
+        return message;
     }
 
     private static string BuildHtml(string confirmationUrl, string hours) =>
