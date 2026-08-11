@@ -5,8 +5,6 @@ namespace AuthService.IntegrationTests;
 
 internal sealed record TokenPair(string AccessToken, string RefreshToken, int ExpiresInSeconds, string TokenType);
 
-internal sealed record RegisterResult(Guid Id);
-
 internal sealed record RegisteredUser(string Email, string Username);
 
 internal static class ApiTestHelpers
@@ -23,7 +21,13 @@ internal static class ApiTestHelpers
         string? password = null) =>
         client.PostAsJsonAsync(
             "/api/auth/register",
-            new { email = user.Email, username = user.Username, password = password ?? DefaultPassword });
+            new
+            {
+                email = user.Email,
+                username = user.Username,
+                password = password ?? DefaultPassword,
+                acceptedTerms = true
+            });
 
     public static RegisteredUser NewUser() => new(UniqueEmail(), UniqueUsername());
 
@@ -92,12 +96,84 @@ internal static class ApiTestHelpers
         return await client.SendAsync(request);
     }
 
-    public static async Task<HttpResponseMessage> DeleteAccountAsync(this HttpClient client, string accessToken)
+    public static async Task<HttpResponseMessage> DeleteAccountAsync(
+        this HttpClient client,
+        string accessToken,
+        string? password = null)
     {
-        using HttpRequestMessage request = new(HttpMethod.Delete, "/api/auth/me");
+        using HttpRequestMessage request = new(HttpMethod.Delete, "/api/auth/me")
+        {
+            Content = JsonContent.Create(new { password = password ?? DefaultPassword })
+        };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
         return await client.SendAsync(request);
+    }
+
+    public static Task<HttpResponseMessage> ForgotPasswordAsync(this HttpClient client, string email) =>
+        client.PostAsJsonAsync("/api/auth/password/forgot", new { email });
+
+    public static Task<HttpResponseMessage> ResetPasswordAsync(
+        this HttpClient client,
+        string token,
+        string newPassword) =>
+        client.PostAsJsonAsync("/api/auth/password/reset", new { token, newPassword });
+
+    public static Task<HttpResponseMessage> LockUserAsync(
+        this HttpClient client,
+        string? accessToken,
+        Guid userId) =>
+        client.SendAdminAsync(HttpMethod.Post, $"/api/admin/users/{userId}/lock", accessToken);
+
+    public static Task<HttpResponseMessage> UnlockUserAsync(
+        this HttpClient client,
+        string? accessToken,
+        Guid userId) =>
+        client.SendAdminAsync(HttpMethod.Post, $"/api/admin/users/{userId}/unlock", accessToken);
+
+    public static async Task<HttpResponseMessage> GrantRoleAsync(
+        this HttpClient client,
+        string? accessToken,
+        Guid userId,
+        string role = "Admin")
+    {
+        using HttpRequestMessage request = new(HttpMethod.Post, $"/api/admin/users/{userId}/roles")
+        {
+            Content = JsonContent.Create(new { role })
+        };
+
+        return await client.SendWithBearerAsync(request, accessToken);
+    }
+
+    public static Task<HttpResponseMessage> RevokeRoleAsync(
+        this HttpClient client,
+        string? accessToken,
+        Guid userId,
+        string role = "Admin") =>
+        client.SendAdminAsync(HttpMethod.Delete, $"/api/admin/users/{userId}/roles/{role}", accessToken);
+
+    private static async Task<HttpResponseMessage> SendAdminAsync(
+        this HttpClient client,
+        HttpMethod method,
+        string path,
+        string? accessToken)
+    {
+        using HttpRequestMessage request = new(method, path);
+
+        return await client.SendWithBearerAsync(request, accessToken);
+    }
+
+    private static Task<HttpResponseMessage> SendWithBearerAsync(
+        this HttpClient client,
+        HttpRequestMessage request,
+        string? accessToken)
+    {
+        if (accessToken is not null)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        }
+
+        return client.SendAsync(request);
     }
 
     public static async Task FailLoginsAsync(this HttpClient client, string identifier, int count)

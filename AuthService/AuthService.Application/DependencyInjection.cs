@@ -1,5 +1,6 @@
 using AuthService.Application.Authentication;
 using AuthService.Application.EmailConfirmations;
+using AuthService.Application.PasswordResets;
 using Common.Application.Behaviors;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +22,8 @@ public static class DependencyInjection
 
         services.AddScoped<IAuthTokenIssuer, AuthTokenIssuer>();
         services.AddScoped<IEmailConfirmationIssuer, EmailConfirmationIssuer>();
+        services.AddScoped<IPasswordResetIssuer, PasswordResetIssuer>();
+        services.AddScoped<ISessionRevoker, SessionRevoker>();
 
         return services;
     }

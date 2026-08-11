@@ -6,20 +6,18 @@ namespace AuthService.Domain.Users;
 
 public sealed class User : AggregateRoot
 {
-    public const int MaxFailedAttempts = 5;
-
-    private static readonly TimeSpan BaseLockout = TimeSpan.FromMinutes(1);
-    private static readonly TimeSpan MaxLockout = TimeSpan.FromMinutes(30);
+    private readonly List<UserRoleAssignment> _roles = [];
 
     private User()
     {
     }
 
-    private User(Guid id, Email email, Username username, string passwordHash) : base(id)
+    private User(Guid id, UserDraft draft) : base(id)
     {
-        Email = email;
-        Username = username;
-        PasswordHash = passwordHash;
+        Email = draft.Email;
+        Username = draft.Username;
+        PasswordHash = draft.PasswordHash;
+        AcceptedTerms = draft.AcceptedTerms;
         Status = UserStatus.Active;
     }
 
@@ -33,22 +31,43 @@ public sealed class User : AggregateRoot
 
     public UserStatus Status { get; private set; }
 
-    public int FailedLoginCount { get; private set; }
+    public TermsAcceptance AcceptedTerms { get; private set; } = null!;
 
-    public DateTime? LockedUntilUtc { get; private set; }
+    public IReadOnlyCollection<UserRole> Roles => [.. _roles.Select(assignment => assignment.Role)];
 
-    public static Result<User> Register(Email email, Username username, string passwordHash)
+    public bool IsDeleted => Status is UserStatus.Deleted;
+
+    public bool IsLocked => Status is UserStatus.Locked;
+
+    public bool CanSignIn => !IsDeleted && !IsLocked;
+
+    public static Result<User> Register(UserDraft draft)
     {
-        if (string.IsNullOrWhiteSpace(passwordHash))
+        if (string.IsNullOrWhiteSpace(draft.PasswordHash))
         {
             return UserErrors.PasswordHashMissing;
         }
 
-        User user = new(Guid.CreateVersion7(), email, username, passwordHash);
-        user.Raise(new UserRegisteredDomainEvent(user.Id, email.Value, username.Value));
+        if (string.IsNullOrWhiteSpace(draft.AcceptedTerms.Version))
+        {
+            return UserErrors.TermsNotAccepted;
+        }
+
+        User user = new(Guid.CreateVersion7(), draft);
+        user.Raise(new UserRegisteredDomainEvent(user.Id, draft.Email.Value, draft.Username.Value));
         user.Raise(new EmailConfirmationRequestedDomainEvent(user.Id));
 
         return user;
+    }
+
+    public void RecordDuplicateRegistrationAttempt()
+    {
+        if (IsDeleted)
+        {
+            return;
+        }
+
+        Raise(new DuplicateRegistrationAttemptedDomainEvent(Id));
     }
 
     public Result ConfirmEmail()
@@ -64,13 +83,36 @@ public sealed class User : AggregateRoot
         return Result.Success();
     }
 
-    public bool IsLockedOut(DateTime utcNow) => LockedUntilUtc is not null && LockedUntilUtc > utcNow;
+    public Result RequestPasswordReset()
+    {
+        if (!CanSignIn)
+        {
+            return Result.Failure(UserErrors.CannotSignIn);
+        }
 
-    public bool IsDeleted => Status is UserStatus.Deleted;
+        Raise(new PasswordResetRequestedDomainEvent(Id));
 
-    public bool CanSignIn(DateTime utcNow) => !IsDeleted && !IsLockedOut(utcNow);
+        return Result.Success();
+    }
 
-    public Result Delete()
+    public Result ChangePassword(string passwordHash)
+    {
+        if (string.IsNullOrWhiteSpace(passwordHash))
+        {
+            return Result.Failure(UserErrors.PasswordHashMissing);
+        }
+
+        if (!CanSignIn)
+        {
+            return Result.Failure(UserErrors.CannotSignIn);
+        }
+
+        PasswordHash = passwordHash;
+
+        return Result.Success();
+    }
+
+    public Result Delete(Email pseudonymizedEmail)
     {
         if (IsDeleted)
         {
@@ -78,40 +120,71 @@ public sealed class User : AggregateRoot
         }
 
         Status = UserStatus.Deleted;
+        Email = pseudonymizedEmail;
         Raise(new UserDeletedDomainEvent(Id));
 
         return Result.Success();
     }
 
-    public void RecordFailedLogin(DateTime utcNow)
-    {
-        FailedLoginCount++;
+    public bool IsInRole(UserRole role) => _roles.Exists(assignment => assignment.Role == role);
 
-        if (FailedLoginCount % MaxFailedAttempts != 0)
+    public Result Grant(UserRole role)
+    {
+        if (IsDeleted)
         {
-            return;
+            return Result.Failure(UserErrors.AlreadyDeleted);
         }
 
-        LockedUntilUtc = utcNow.Add(ComputeLockoutDuration());
+        if (IsInRole(role))
+        {
+            return Result.Failure(UserErrors.RoleAlreadyGranted);
+        }
+
+        _roles.Add(UserRoleAssignment.Of(role));
+
+        return Result.Success();
+    }
+
+    public Result Revoke(UserRole role)
+    {
+        int removed = _roles.RemoveAll(assignment => assignment.Role == role);
+
+        return removed is 0
+            ? Result.Failure(UserErrors.RoleNotGranted)
+            : Result.Success();
+    }
+
+    public Result Lock()
+    {
+        if (IsDeleted)
+        {
+            return Result.Failure(UserErrors.AlreadyDeleted);
+        }
+
+        if (IsLocked)
+        {
+            return Result.Failure(UserErrors.AlreadyLocked);
+        }
+
         Status = UserStatus.Locked;
+
+        return Result.Success();
     }
 
-    public void RecordSuccessfulLogin()
+    public Result Unlock()
     {
-        FailedLoginCount = 0;
-        LockedUntilUtc = null;
-
-        if (Status is UserStatus.Locked)
+        if (IsDeleted)
         {
-            Status = UserStatus.Active;
+            return Result.Failure(UserErrors.AlreadyDeleted);
         }
-    }
 
-    private TimeSpan ComputeLockoutDuration()
-    {
-        int lockoutLevel = FailedLoginCount / MaxFailedAttempts;
-        double minutes = BaseLockout.TotalMinutes * Math.Pow(2, lockoutLevel - 1);
+        if (!IsLocked)
+        {
+            return Result.Failure(UserErrors.NotLocked);
+        }
 
-        return TimeSpan.FromMinutes(Math.Min(minutes, MaxLockout.TotalMinutes));
+        Status = UserStatus.Active;
+
+        return Result.Success();
     }
 }

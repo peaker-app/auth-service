@@ -1,4 +1,5 @@
-using AuthService.Domain.RefreshTokens;
+using AuthService.Application.Abstractions;
+using AuthService.Application.Authentication;
 using AuthService.Domain.Users;
 using Common.Application.Abstractions;
 using Common.Application.Messaging;
@@ -8,9 +9,10 @@ namespace AuthService.Application.Users.DeleteAccount;
 
 internal sealed class DeleteAccountCommandHandler(
     IUserRepository userRepository,
-    IRefreshTokenRepository refreshTokenRepository,
-    IUnitOfWork unitOfWork,
-    IDateTimeProvider dateTimeProvider) : ICommandHandler<DeleteAccountCommand>
+    IPasswordHasher passwordHasher,
+    IEmailPseudonymizer emailPseudonymizer,
+    ISessionRevoker sessionRevoker,
+    IUnitOfWork unitOfWork) : ICommandHandler<DeleteAccountCommand>
 {
     public async Task<Result> Handle(DeleteAccountCommand command, CancellationToken cancellationToken)
     {
@@ -21,29 +23,24 @@ internal sealed class DeleteAccountCommandHandler(
             return Result.Failure(UserErrors.NotFound(command.UserId));
         }
 
-        Result deletion = user.Delete();
+        return passwordHasher.Verify(command.Password, user.PasswordHash)
+            ? await DeleteAsync(user, cancellationToken)
+            : Result.Failure(UserErrors.InvalidCredentials);
+    }
+
+    private async Task<Result> DeleteAsync(User user, CancellationToken cancellationToken)
+    {
+        await sessionRevoker.RevokeAllAsync(user, cancellationToken);
+
+        Result deletion = user.Delete(emailPseudonymizer.Pseudonymize(user.Email));
 
         if (deletion.IsFailure)
         {
             return deletion;
         }
 
-        await RevokeAllSessionsAsync(user.Id, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
-    }
-
-    private async Task RevokeAllSessionsAsync(Guid userId, CancellationToken cancellationToken)
-    {
-        IReadOnlyCollection<RefreshToken> activeTokens =
-            await refreshTokenRepository.GetActiveByUserAsync(userId, cancellationToken);
-
-        DateTime utcNow = dateTimeProvider.UtcNow;
-
-        foreach (RefreshToken token in activeTokens)
-        {
-            token.Revoke(utcNow);
-        }
     }
 }

@@ -1,4 +1,5 @@
 using System.Net;
+using Common.Application.Abstractions;
 using FluentAssertions;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Xunit;
@@ -61,13 +62,14 @@ public sealed class LoginEndpointTests(AuthServiceApiFactory factory)
     }
 
     [Fact]
-    public async Task Login_AfterFiveFailedAttempts_LocksAccount()
+    public async Task Login_AgainstAnAccountLockedByAnAdministrator_ReturnsTheGenericUnauthorized()
     {
-        RegisteredUser user = await _client.RegisterUserAsync();
-        await _client.FailLoginsAsync(user.Email, 5);
+        RegisteredUser victim = await _client.RegisterUserAsync();
+        Guid victimId = await factory.FindUserIdByEmailAsync(victim.Email);
+        await factory.LockAsync(victimId);
 
         using HttpResponseMessage response = await _client.LoginAsync(
-            user.Email, ApiTestHelpers.DefaultPassword);
+            victim.Email, ApiTestHelpers.DefaultPassword);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -98,6 +100,33 @@ public sealed class LoginEndpointTests(AuthServiceApiFactory factory)
 
         accessToken.Claims.Select(claim => claim.Type)
             .Should().Contain(["sub", "email", "jti", "iat", "exp", "iss", "aud"]);
+    }
+
+    [Fact]
+    public async Task Login_AccessTokenOfARegularAccount_CarriesNoRoles()
+    {
+        RegisteredUser user = await _client.RegisterUserAsync();
+        TokenPair tokens = await _client.LoginWithTokensAsync(user.Email);
+
+        JsonWebToken accessToken = new(tokens.AccessToken);
+
+        accessToken.Claims.Where(claim => claim.Type == PeakerRoles.ClaimType).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Login_AccessTokenOfAnAdminAccount_CarriesTheAdminRole()
+    {
+        RegisteredUser user = await _client.RegisterUserAsync();
+        await factory.GrantAdminAsync(await factory.FindUserIdByEmailAsync(user.Email));
+
+        TokenPair tokens = await _client.LoginWithTokensAsync(user.Email);
+
+        JsonWebToken accessToken = new(tokens.AccessToken);
+
+        accessToken.Claims
+            .Where(claim => claim.Type == PeakerRoles.ClaimType)
+            .Select(claim => claim.Value)
+            .Should().Equal(PeakerRoles.Admin);
     }
 
     [Fact]

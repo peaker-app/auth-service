@@ -132,12 +132,12 @@ public sealed class EmailConfirmationEndpointTests(AuthServiceApiFactory factory
         using HttpResponseMessage registration = await _client.RegisterAsync(user);
         registration.EnsureSuccessStatusCode();
 
-        RegisterResult created = (await registration.Content.ReadFromJsonAsync<RegisterResult>())!;
+        Guid userId = await _factory.FindUserIdByEmailAsync(user.Email);
         string? token = await _factory.ConfirmationEmails.WaitForTokenAsync(user.Email);
 
         token.Should().NotBeNull();
 
-        return new ConfirmableAccount(created.Id, user.Email, token!);
+        return new ConfirmableAccount(userId, user.Email, token!);
     }
 
     private sealed record ConfirmableAccount(Guid UserId, string Email, string Token);

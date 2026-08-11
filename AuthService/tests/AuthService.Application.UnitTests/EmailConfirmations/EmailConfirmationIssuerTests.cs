@@ -22,6 +22,7 @@ public sealed class EmailConfirmationIssuerTests
         Substitute.For<IEmailConfirmationTokenGenerator>();
 
     private readonly IConfirmationEmailSender _emailSender = Substitute.For<IConfirmationEmailSender>();
+    private readonly IEmailQuota _emailQuota = Substitute.For<IEmailQuota>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IDateTimeProvider _dateTimeProvider = Substitute.For<IDateTimeProvider>();
     private readonly EmailConfirmationIssuer _issuer;
@@ -35,8 +36,36 @@ public sealed class EmailConfirmationIssuerTests
         _tokenRepository.GetActiveByUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns([]);
 
+        _emailQuota.TryReserveAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(EmailQuotaVerdict.Allowed);
+
         _issuer = new EmailConfirmationIssuer(
-            _tokenRepository, _tokenGenerator, _emailSender, _unitOfWork, _dateTimeProvider);
+            _tokenRepository, _tokenGenerator, _emailSender, _emailQuota, _unitOfWork, _dateTimeProvider);
+    }
+
+    [Fact]
+    public async Task IssueAsync_WhenTheRecipientQuotaIsExhausted_NeitherIssuesNorSends()
+    {
+        _emailQuota.TryReserveAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(EmailQuotaVerdict.RecipientExhausted);
+
+        Result result = await _issuer.IssueAsync(Factories.ActiveUser(), CancellationToken.None);
+
+        result.Error.Should().Be(EmailConfirmationErrors.RecipientQuotaExceeded);
+        _tokenRepository.DidNotReceive().Add(Arg.Any<EmailConfirmationToken>());
+        await _emailSender.DidNotReceive().SendAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task IssueAsync_WhenTheGlobalQuotaIsExhausted_ReturnsGlobalQuotaExceeded()
+    {
+        _emailQuota.TryReserveAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(EmailQuotaVerdict.GlobalExhausted);
+
+        Result result = await _issuer.IssueAsync(Factories.ActiveUser(), CancellationToken.None);
+
+        result.Error.Should().Be(EmailConfirmationErrors.GlobalQuotaExceeded);
     }
 
     [Fact]

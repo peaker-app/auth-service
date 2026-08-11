@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using AuthService.API.Extensions;
 using AuthService.Application;
 using AuthService.Infrastructure;
@@ -22,7 +23,9 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IUserContext, UserContext>();
 builder.Services.AddLocalJwtAuthentication();
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddCommonSwagger("auth-service");
 
 builder.Services.AddHealthChecks().AddDbContextCheck<AuthDbContext>();

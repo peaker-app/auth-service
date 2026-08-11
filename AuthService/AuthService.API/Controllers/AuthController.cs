@@ -1,7 +1,7 @@
 using AuthService.API.Requests;
 using AuthService.Application.Authentication;
 using AuthService.Application.EmailConfirmations.ResendEmailConfirmation;
-using AuthService.Application.Users.DeleteAccount;
+using AuthService.Application.Users.ExportMyData;
 using Common.API.Results;
 using Common.Application.Abstractions;
 using Common.Domain.Results;
@@ -17,14 +17,14 @@ public sealed class AuthController(ISender sender, IUserContext userContext) : C
 {
     [HttpPost("register")]
     [AllowAnonymous]
-    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Register(RegisterRequest request, CancellationToken cancellationToken)
     {
-        Result<Guid> result = await sender.Send(request.ToCommand(), cancellationToken);
+        Result result = await sender.Send(request.ToCommand(), cancellationToken);
 
-        return result.ToActionResult(id => StatusCode(StatusCodes.Status201Created, new { id }));
+        return result.ToActionResult(() => StatusCode(StatusCodes.Status202Accepted));
     }
 
     [HttpPost("login")]
@@ -78,6 +78,32 @@ public sealed class AuthController(ISender sender, IUserContext userContext) : C
         return result.ToActionResult();
     }
 
+    [HttpPost("password/forgot")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ForgotPassword(
+        ForgotPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        Result result = await sender.Send(request.ToCommand(), cancellationToken);
+
+        return result.ToActionResult(() => StatusCode(StatusCodes.Status202Accepted));
+    }
+
+    [HttpPost("password/reset")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResetPassword(
+        ResetPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        Result result = await sender.Send(request.ToCommand(), cancellationToken);
+
+        return result.ToActionResult();
+    }
+
     [HttpPost("logout")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -89,15 +115,31 @@ public sealed class AuthController(ISender sender, IUserContext userContext) : C
         return result.ToActionResult();
     }
 
+    [HttpGet("me/export")]
+    [Authorize]
+    [ProducesResponseType(typeof(AccountExportResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ExportMyData(CancellationToken cancellationToken)
+    {
+        Result<AccountExportResponse> result = await sender.Send(
+            new ExportMyDataQuery(userContext.UserId), cancellationToken);
+
+        return result.ToActionResult();
+    }
+
     [HttpDelete("me")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> DeleteAccount(CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteAccount(
+        [FromBody] DeleteAccountRequest request,
+        CancellationToken cancellationToken)
     {
-        Result result = await sender.Send(new DeleteAccountCommand(userContext.UserId), cancellationToken);
+        Result result = await sender.Send(request.ToCommand(userContext.UserId), cancellationToken);
 
         return result.ToActionResult();
     }

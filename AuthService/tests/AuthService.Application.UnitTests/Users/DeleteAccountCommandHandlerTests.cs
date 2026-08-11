@@ -1,6 +1,7 @@
+using AuthService.Application.Abstractions;
+using AuthService.Application.Authentication;
 using AuthService.Application.UnitTests.TestData;
 using AuthService.Application.Users.DeleteAccount;
-using AuthService.Domain.RefreshTokens;
 using AuthService.Domain.Users;
 using Common.Application.Abstractions;
 using Common.Domain.Results;
@@ -12,30 +13,29 @@ namespace AuthService.Application.UnitTests.Users;
 
 public sealed class DeleteAccountCommandHandlerTests
 {
-    private static readonly DateTime Now = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+    private const string Password = "correct-horse-battery";
 
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
-    private readonly IRefreshTokenRepository _refreshTokenRepository = Substitute.For<IRefreshTokenRepository>();
+    private readonly IPasswordHasher _passwordHasher = Substitute.For<IPasswordHasher>();
+    private readonly IEmailPseudonymizer _emailPseudonymizer = Substitute.For<IEmailPseudonymizer>();
+    private readonly ISessionRevoker _sessionRevoker = Substitute.For<ISessionRevoker>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IDateTimeProvider _dateTimeProvider = Substitute.For<IDateTimeProvider>();
     private readonly DeleteAccountCommandHandler _handler;
 
     public DeleteAccountCommandHandlerTests()
     {
-        _dateTimeProvider.UtcNow.Returns(Now);
-        _refreshTokenRepository
-            .GetActiveByUserAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns([]);
+        _passwordHasher.Verify(Password, Arg.Any<string?>()).Returns(true);
+        _emailPseudonymizer.Pseudonymize(Arg.Any<Email>()).Returns(Factories.Pseudonym());
         _handler = new DeleteAccountCommandHandler(
-            _userRepository, _refreshTokenRepository, _unitOfWork, _dateTimeProvider);
+            _userRepository, _passwordHasher, _emailPseudonymizer, _sessionRevoker, _unitOfWork);
     }
 
     [Fact]
-    public async Task Handle_WithActiveAccount_MarksTheUserAsDeleted()
+    public async Task Handle_WithTheCorrectPassword_MarksTheUserAsDeleted()
     {
         User user = GivenExistingUser(Factories.ActiveUser());
 
-        Result result = await _handler.Handle(new DeleteAccountCommand(user.Id), CancellationToken.None);
+        Result result = await _handler.Handle(CommandFor(user), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         user.Status.Should().Be(UserStatus.Deleted);
@@ -43,19 +43,37 @@ public sealed class DeleteAccountCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WithActiveAccount_RevokesEveryActiveSession()
+    public async Task Handle_WithTheCorrectPassword_ReplacesTheEmailWithThePseudonym()
     {
         User user = GivenExistingUser(Factories.ActiveUser());
-        RefreshToken first = Factories.RefreshTokenFor(user.Id, Now);
-        RefreshToken second = Factories.RefreshTokenFor(user.Id, Now);
-        _refreshTokenRepository
-            .GetActiveByUserAsync(user.Id, Arg.Any<CancellationToken>())
-            .Returns([first, second]);
 
-        await _handler.Handle(new DeleteAccountCommand(user.Id), CancellationToken.None);
+        await _handler.Handle(CommandFor(user), CancellationToken.None);
 
-        first.RevokedAtUtc.Should().Be(Now);
-        second.RevokedAtUtc.Should().Be(Now);
+        user.Email.Value.Should().Be(Factories.PseudonymizedEmail);
+    }
+
+    [Fact]
+    public async Task Handle_WithTheCorrectPassword_RevokesEverySession()
+    {
+        User user = GivenExistingUser(Factories.ActiveUser());
+
+        await _handler.Handle(CommandFor(user), CancellationToken.None);
+
+        await _sessionRevoker.Received(1).RevokeAllAsync(user, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WithTheWrongPassword_ReturnsUnauthorizedWithoutDeleting()
+    {
+        User user = GivenExistingUser(Factories.ActiveUser());
+        _passwordHasher.Verify("wrong", Arg.Any<string?>()).Returns(false);
+
+        Result result = await _handler.Handle(
+            new DeleteAccountCommand(user.Id, "wrong"), CancellationToken.None);
+
+        result.Error.Should().Be(UserErrors.InvalidCredentials);
+        user.Status.Should().Be(UserStatus.Active);
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -64,7 +82,8 @@ public sealed class DeleteAccountCommandHandlerTests
         Guid userId = Guid.CreateVersion7();
         _userRepository.GetByIdAsync(userId, Arg.Any<CancellationToken>()).Returns((User?)null);
 
-        Result result = await _handler.Handle(new DeleteAccountCommand(userId), CancellationToken.None);
+        Result result = await _handler.Handle(
+            new DeleteAccountCommand(userId, Password), CancellationToken.None);
 
         result.Error.Should().Be(UserErrors.NotFound(userId));
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
@@ -75,11 +94,13 @@ public sealed class DeleteAccountCommandHandlerTests
     {
         User user = GivenExistingUser(Factories.DeletedUser());
 
-        Result result = await _handler.Handle(new DeleteAccountCommand(user.Id), CancellationToken.None);
+        Result result = await _handler.Handle(CommandFor(user), CancellationToken.None);
 
         result.Error.Should().Be(UserErrors.AlreadyDeleted);
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
+
+    private static DeleteAccountCommand CommandFor(User user) => new(user.Id, Password);
 
     private User GivenExistingUser(User user)
     {

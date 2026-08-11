@@ -9,12 +9,11 @@ namespace AuthService.Domain.UnitTests.Users;
 
 public sealed class UserTests
 {
-    private static readonly DateTime Now = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
 
     [Fact]
     public void Register_WithValidCredentials_CreatesActiveUnconfirmedUser()
     {
-        Result<User> result = User.Register(TestEmail.Create(), TestUsername.Create(), UserMother.PasswordHash);
+        Result<User> result = User.Register(UserMother.Draft());
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(UserStatus.Active);
@@ -24,7 +23,7 @@ public sealed class UserTests
     [Fact]
     public void Register_KeepsTheUsernameAsTyped()
     {
-        Result<User> result = User.Register(TestEmail.Create(), TestUsername.Create(), UserMother.PasswordHash);
+        Result<User> result = User.Register(UserMother.Draft());
 
         result.Value.Username.Value.Should().Be(TestUsername.Raw);
     }
@@ -32,7 +31,7 @@ public sealed class UserTests
     [Fact]
     public void Register_RaisesUserRegisteredDomainEventCarryingTheUsername()
     {
-        Result<User> result = User.Register(TestEmail.Create(), TestUsername.Create(), UserMother.PasswordHash);
+        Result<User> result = User.Register(UserMother.Draft());
 
         result.Value.DomainEvents.OfType<UserRegisteredDomainEvent>().Should().ContainSingle()
             .Which.Username.Should().Be(TestUsername.Raw);
@@ -43,7 +42,7 @@ public sealed class UserTests
     {
         Email email = TestEmail.Create();
 
-        Result<User> result = User.Register(email, TestUsername.Create(), UserMother.PasswordHash);
+        Result<User> result = User.Register(UserMother.Draft() with { Email = email });
 
         result.Value.DomainEvents.OfType<UserRegisteredDomainEvent>().Should().ContainSingle()
             .Which.Email.Should().Be(email.Value);
@@ -52,7 +51,7 @@ public sealed class UserTests
     [Fact]
     public void Register_RaisesEmailConfirmationRequestedDomainEvent()
     {
-        Result<User> result = User.Register(TestEmail.Create(), TestUsername.Create(), UserMother.PasswordHash);
+        Result<User> result = User.Register(UserMother.Draft());
 
         result.Value.DomainEvents.OfType<EmailConfirmationRequestedDomainEvent>().Should().ContainSingle()
             .Which.UserId.Should().Be(result.Value.Id);
@@ -103,56 +102,9 @@ public sealed class UserTests
     [Fact]
     public void Register_WithEmptyHash_ReturnsPasswordHashMissing()
     {
-        Result<User> result = User.Register(TestEmail.Create(), TestUsername.Create(), "   ");
+        Result<User> result = User.Register(UserMother.Draft("   "));
 
         result.Error.Should().Be(UserErrors.PasswordHashMissing);
-    }
-
-    [Fact]
-    public void RecordFailedLogin_BelowThreshold_DoesNotLock()
-    {
-        User user = UserMother.WithFailedLogins(User.MaxFailedAttempts - 1, Now);
-
-        user.LockedUntilUtc.Should().BeNull();
-        user.IsLockedOut(Now).Should().BeFalse();
-    }
-
-    [Fact]
-    public void RecordFailedLogin_ReachingThreshold_LocksForOneMinute()
-    {
-        User user = UserMother.WithFailedLogins(User.MaxFailedAttempts, Now);
-
-        user.Status.Should().Be(UserStatus.Locked);
-        user.LockedUntilUtc.Should().Be(Now.AddMinutes(1));
-        user.IsLockedOut(Now).Should().BeTrue();
-    }
-
-    [Fact]
-    public void RecordFailedLogin_SecondLockoutCycle_GrowsWaitTime()
-    {
-        User user = UserMother.WithFailedLogins(User.MaxFailedAttempts * 2, Now);
-
-        user.LockedUntilUtc.Should().Be(Now.AddMinutes(2));
-    }
-
-    [Fact]
-    public void RecordSuccessfulLogin_AfterLockout_ResetsCounterAndUnlocks()
-    {
-        User user = UserMother.WithFailedLogins(User.MaxFailedAttempts, Now);
-
-        user.RecordSuccessfulLogin();
-
-        user.FailedLoginCount.Should().Be(0);
-        user.LockedUntilUtc.Should().BeNull();
-        user.Status.Should().Be(UserStatus.Active);
-    }
-
-    [Fact]
-    public void IsLockedOut_AfterLockWindowElapsed_ReturnsFalse()
-    {
-        User user = UserMother.WithFailedLogins(User.MaxFailedAttempts, Now);
-
-        user.IsLockedOut(Now.AddMinutes(2)).Should().BeFalse();
     }
 
     [Fact]
@@ -160,10 +112,20 @@ public sealed class UserTests
     {
         User user = UserMother.Registered();
 
-        Result result = user.Delete();
+        Result result = user.Delete(TestEmail.Pseudonym());
 
         result.IsSuccess.Should().BeTrue();
         user.Status.Should().Be(UserStatus.Deleted);
+    }
+
+    [Fact]
+    public void Delete_OnActiveAccount_ReplacesTheEmailWithThePseudonym()
+    {
+        User user = UserMother.Registered();
+
+        user.Delete(TestEmail.Pseudonym());
+
+        user.Email.Value.Should().Be(TestEmail.PseudonymValue);
     }
 
     [Fact]
@@ -171,7 +133,7 @@ public sealed class UserTests
     {
         User user = UserMother.Registered();
 
-        user.Delete();
+        user.Delete(TestEmail.Pseudonym());
 
         user.DomainEvents.OfType<UserDeletedDomainEvent>().Should().ContainSingle()
             .Which.UserId.Should().Be(user.Id);
@@ -182,7 +144,7 @@ public sealed class UserTests
     {
         User user = UserMother.Deleted();
 
-        Result result = user.Delete();
+        Result result = user.Delete(TestEmail.Pseudonym());
 
         result.Error.Should().Be(UserErrors.AlreadyDeleted);
     }
@@ -192,7 +154,7 @@ public sealed class UserTests
     {
         User user = UserMother.Deleted();
 
-        user.Delete();
+        user.Delete(TestEmail.Pseudonym());
 
         user.DomainEvents.OfType<UserDeletedDomainEvent>().Should().ContainSingle();
     }
@@ -202,7 +164,7 @@ public sealed class UserTests
     {
         User user = UserMother.Registered();
 
-        user.CanSignIn(Now).Should().BeTrue();
+        user.CanSignIn.Should().BeTrue();
     }
 
     [Fact]
@@ -210,14 +172,69 @@ public sealed class UserTests
     {
         User user = UserMother.Deleted();
 
-        user.CanSignIn(Now).Should().BeFalse();
+        user.CanSignIn.Should().BeFalse();
     }
 
     [Fact]
-    public void CanSignIn_WhenLockedOut_ReturnsFalse()
+    public void CanSignIn_WhenLocked_ReturnsFalse()
     {
-        User user = UserMother.WithFailedLogins(User.MaxFailedAttempts, Now);
+        User user = UserMother.Locked();
 
-        user.CanSignIn(Now).Should().BeFalse();
+        user.CanSignIn.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ChangePassword_OnActiveAccount_ReplacesTheHash()
+    {
+        User user = UserMother.Registered();
+
+        Result result = user.ChangePassword("argon2id$new");
+
+        result.IsSuccess.Should().BeTrue();
+        user.PasswordHash.Should().Be("argon2id$new");
+    }
+
+    [Fact]
+    public void ChangePassword_WithEmptyHash_ReturnsPasswordHashMissing()
+    {
+        User user = UserMother.Registered();
+
+        Result result = user.ChangePassword("   ");
+
+        result.Error.Should().Be(UserErrors.PasswordHashMissing);
+    }
+
+    [Fact]
+    public void ChangePassword_OnADeletedAccount_IsRejected()
+    {
+        User user = UserMother.Deleted();
+
+        Result result = user.ChangePassword("argon2id$new");
+
+        result.Error.Should().Be(UserErrors.CannotSignIn);
+        user.PasswordHash.Should().Be(UserMother.PasswordHash);
+    }
+
+    [Fact]
+    public void RequestPasswordReset_OnActiveAccount_RaisesTheDomainEvent()
+    {
+        User user = UserMother.Registered();
+
+        Result result = user.RequestPasswordReset();
+
+        result.IsSuccess.Should().BeTrue();
+        user.DomainEvents.OfType<PasswordResetRequestedDomainEvent>().Should().ContainSingle()
+            .Which.UserId.Should().Be(user.Id);
+    }
+
+    [Fact]
+    public void RequestPasswordReset_OnALockedAccount_IsRejected()
+    {
+        User user = UserMother.Locked();
+
+        Result result = user.RequestPasswordReset();
+
+        result.Error.Should().Be(UserErrors.CannotSignIn);
+        user.DomainEvents.OfType<PasswordResetRequestedDomainEvent>().Should().BeEmpty();
     }
 }

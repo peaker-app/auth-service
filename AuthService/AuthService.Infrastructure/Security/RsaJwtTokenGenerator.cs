@@ -41,6 +41,6 @@ internal sealed class RsaJwtTokenGenerator(
         [JwtRegisteredClaimNames.Sub] = user.Id.ToString(),
         [JwtRegisteredClaimNames.Email] = user.Email.Value,
         [JwtRegisteredClaimNames.Jti] = Guid.CreateVersion7().ToString(),
-        ["roles"] = Array.Empty<string>()
+        [PeakerRoles.ClaimType] = user.Roles.Select(role => role.ToString()).ToArray()
     };
 }

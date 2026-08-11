@@ -19,6 +19,7 @@ public sealed class LoginUserCommandHandlerTests
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
     private readonly IPasswordHasher _passwordHasher = Substitute.For<IPasswordHasher>();
     private readonly IAuthTokenIssuer _tokenIssuer = Substitute.For<IAuthTokenIssuer>();
+    private readonly ILoginThrottle _loginThrottle = Substitute.For<ILoginThrottle>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IDateTimeProvider _dateTimeProvider = Substitute.For<IDateTimeProvider>();
     private readonly LoginUserCommandHandler _handler;
@@ -26,7 +27,11 @@ public sealed class LoginUserCommandHandlerTests
     public LoginUserCommandHandlerTests()
     {
         _dateTimeProvider.UtcNow.Returns(Now);
-        _handler = new LoginUserCommandHandler(_userRepository, _passwordHasher, _tokenIssuer, _unitOfWork, _dateTimeProvider);
+        _loginThrottle
+            .EvaluateAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(LoginThrottleVerdict.Allowed);
+        _handler = new LoginUserCommandHandler(
+            _userRepository, _passwordHasher, _tokenIssuer, _loginThrottle, _unitOfWork, _dateTimeProvider);
     }
 
     [Fact]
@@ -70,6 +75,16 @@ public sealed class LoginUserCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_OnSuccess_ClearsTheThrottle()
+    {
+        GivenUserFoundByEmail();
+
+        await _handler.Handle(Command, CancellationToken.None);
+
+        await _loginThrottle.Received(1).ClearAsync(Command.Identifier, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_WithMalformedIdentifier_ReturnsInvalidCredentials()
     {
         Result<AuthTokensResponse> result = await _handler.Handle(
@@ -90,7 +105,7 @@ public sealed class LoginUserCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WithWrongPassword_RecordsFailureAndReturnsInvalidCredentials()
+    public async Task Handle_WithWrongPassword_RecordsTheFailureAndReturnsInvalidCredentials()
     {
         User user = Factories.ActiveUser();
         _userRepository.GetByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns(user);
@@ -99,14 +114,38 @@ public sealed class LoginUserCommandHandlerTests
         Result<AuthTokensResponse> result = await _handler.Handle(Command, CancellationToken.None);
 
         result.Error.Should().Be(UserErrors.InvalidCredentials);
-        user.FailedLoginCount.Should().Be(1);
-        await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _loginThrottle.Received(1)
+            .RecordFailureAsync(Command.Identifier, Command.IpAddress, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WithUnknownIdentifier_AlsoRecordsTheFailure()
+    {
+        _userRepository.GetByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns((User?)null);
+
+        await _handler.Handle(Command, CancellationToken.None);
+
+        await _loginThrottle.Received(1)
+            .RecordFailureAsync(Command.Identifier, Command.IpAddress, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_WhenThrottled_ReturnsTooManyAttemptsWithoutTouchingTheRepository()
+    {
+        _loginThrottle
+            .EvaluateAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(LoginThrottleVerdict.Blocked(TimeSpan.FromSeconds(30)));
+
+        Result<AuthTokensResponse> result = await _handler.Handle(Command, CancellationToken.None);
+
+        result.Error.Should().Be(UserErrors.TooManyAttempts);
+        await _userRepository.DidNotReceive().GetByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Handle_WhenAccountLocked_StillVerifiesThePasswordToKeepTheTimingConstant()
     {
-        _userRepository.GetByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns(Factories.LockedUser(Now));
+        _userRepository.GetByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns(Factories.LockedUser());
 
         Result<AuthTokensResponse> result = await _handler.Handle(Command, CancellationToken.None);
 

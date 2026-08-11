@@ -7,6 +7,12 @@ namespace AuthService.Infrastructure.Persistence.Configurations;
 
 internal sealed class UserConfiguration : EntityConfiguration<User>
 {
+    public const string EmailIndexName = "ux_users_email";
+    public const string UsernameIndexName = "ux_users_username";
+
+    private const string RolesNavigation = "_roles";
+    private const string UserForeignKey = "user_id";
+
     public override void Configure(EntityTypeBuilder<User> builder)
     {
         base.Configure(builder);
@@ -19,10 +25,8 @@ internal sealed class UserConfiguration : EntityConfiguration<User>
             .HasConversion(email => email.Value, value => Email.Create(value).Value)
             .IsRequired();
 
-        builder.HasIndex(user => user.Email).IsUnique().HasDatabaseName("ux_users_email");
+        builder.HasIndex(user => user.Email).IsUnique().HasDatabaseName(EmailIndexName);
 
-// Motivo: la colación acentuada e insensible a mayúsculas hace que la unicidad del username
-// ignore el caso, tal y como exige DESIGN.md §4.1, sin duplicar una columna normalizada.
         builder.Property(user => user.Username)
             .HasColumnName("username")
             .HasMaxLength(Username.MaxLength)
@@ -30,7 +34,7 @@ internal sealed class UserConfiguration : EntityConfiguration<User>
             .HasConversion(username => username.Value, value => Username.Create(value).Value)
             .IsRequired();
 
-        builder.HasIndex(user => user.Username).IsUnique().HasDatabaseName("ux_users_username");
+        builder.HasIndex(user => user.Username).IsUnique().HasDatabaseName(UsernameIndexName);
 
         builder.Property(user => user.PasswordHash).HasColumnName("password_hash").HasMaxLength(255);
         builder.Property(user => user.EmailConfirmed).HasColumnName("email_confirmed").IsRequired();
@@ -41,7 +45,33 @@ internal sealed class UserConfiguration : EntityConfiguration<User>
             .HasConversion<string>()
             .IsRequired();
 
-        builder.Property(user => user.FailedLoginCount).HasColumnName("failed_login_count").IsRequired();
-        builder.Property(user => user.LockedUntilUtc).HasColumnName("locked_until_utc");
+        builder.ComplexProperty(user => user.AcceptedTerms, terms =>
+        {
+            terms.Property(acceptance => acceptance.Version)
+                .HasColumnName("terms_version")
+                .HasMaxLength(TermsAcceptance.MaxVersionLength)
+                .IsRequired();
+
+            terms.Property(acceptance => acceptance.AcceptedAtUtc)
+                .HasColumnName("terms_accepted_at_utc")
+                .IsRequired();
+        });
+
+        ConfigureRoles(builder);
     }
+
+    private static void ConfigureRoles(EntityTypeBuilder<User> builder) =>
+        builder.OwnsMany<UserRoleAssignment>(RolesNavigation, assignment =>
+        {
+            assignment.ToTable("user_roles");
+            assignment.WithOwner().HasForeignKey(UserForeignKey);
+
+            assignment.Property(entity => entity.Role)
+                .HasColumnName("role")
+                .HasMaxLength(20)
+                .HasConversion<string>()
+                .IsRequired();
+
+            assignment.HasKey(UserForeignKey, nameof(UserRoleAssignment.Role));
+        });
 }

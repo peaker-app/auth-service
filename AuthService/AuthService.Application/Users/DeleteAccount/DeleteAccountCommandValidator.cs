@@ -4,5 +4,9 @@ namespace AuthService.Application.Users.DeleteAccount;
 
 internal sealed class DeleteAccountCommandValidator : AbstractValidator<DeleteAccountCommand>
 {
-    public DeleteAccountCommandValidator() => RuleFor(command => command.UserId).NotEmpty();
+    public DeleteAccountCommandValidator()
+    {
+        RuleFor(command => command.UserId).NotEmpty();
+        RuleFor(command => command.Password).NotEmpty();
+    }
 }

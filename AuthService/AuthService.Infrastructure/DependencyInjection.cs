@@ -1,9 +1,11 @@
 using AuthService.Application.Abstractions;
 using AuthService.Domain.EmailConfirmations;
+using AuthService.Domain.PasswordResets;
 using AuthService.Domain.RefreshTokens;
 using AuthService.Domain.Users;
 using AuthService.Domain.Users.Events;
 using AuthService.Infrastructure.ExternalServices;
+using AuthService.Infrastructure.Maintenance;
 using AuthService.Infrastructure.Messaging;
 using AuthService.Infrastructure.Persistence;
 using AuthService.Infrastructure.Persistence.Repositories;
@@ -29,6 +31,9 @@ public static class DependencyInjection
         services.AddSecurity(configuration);
         services.AddBreachedPasswordChecker(configuration);
         services.AddConfirmationEmailSender(configuration);
+        services.AddLoginThrottle(configuration);
+        services.AddTermsPolicy(configuration);
+        services.AddDataRetention(configuration);
         services.AddEventBus(configuration);
 
         return services;
@@ -71,6 +76,7 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IEmailConfirmationTokenRepository, EmailConfirmationTokenRepository>();
+        services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
         services.AddDomainEventHandlers();
     }
 
@@ -82,6 +88,12 @@ public static class DependencyInjection
         services.AddScoped<
             IDomainEventHandler<EmailConfirmationRequestedDomainEvent>,
             EmailConfirmationRequestedDomainEventHandler>();
+        services.AddScoped<
+            IDomainEventHandler<DuplicateRegistrationAttemptedDomainEvent>,
+            DuplicateRegistrationAttemptedDomainEventHandler>();
+        services.AddScoped<
+            IDomainEventHandler<PasswordResetRequestedDomainEvent>,
+            PasswordResetRequestedDomainEventHandler>();
     }
 
     private static void AddSecurity(this IServiceCollection services, IConfiguration configuration)
@@ -93,6 +105,8 @@ public static class DependencyInjection
         services.AddScoped<IAccessTokenGenerator, RsaJwtTokenGenerator>();
         services.AddScoped<IRefreshTokenGenerator, RefreshTokenGenerator>();
         services.AddScoped<IEmailConfirmationTokenGenerator, EmailConfirmationTokenGenerator>();
+        services.AddScoped<IPasswordResetTokenGenerator, PasswordResetTokenGenerator>();
+        services.AddSingleton<IEmailPseudonymizer, EmailPseudonymizer>();
     }
 
     private static void AddAuthTokenOptions(this IServiceCollection services, IConfiguration configuration) =>
@@ -109,7 +123,41 @@ public static class DependencyInjection
     {
         services.AddEmailConfirmationOptions(configuration);
         services.AddSmtpOptions(configuration);
+        services.Configure<EmailQuotaOptions>(configuration.GetSection(EmailQuotaOptions.SectionName));
+
+        services.AddScoped<SmtpMailer>();
         services.AddScoped<IConfirmationEmailSender, SmtpConfirmationEmailSender>();
+        services.AddScoped<IExistingAccountEmailSender, SmtpExistingAccountEmailSender>();
+        services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
+        services.AddScoped<IEmailQuota, DatabaseEmailQuota>();
+    }
+
+    private static void AddTermsPolicy(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<TermsOptions>()
+            .Bind(configuration.GetSection(TermsOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        services.AddSingleton<ITermsPolicy>(provider =>
+            provider.GetRequiredService<IOptions<TermsOptions>>().Value);
+    }
+
+    private static void AddDataRetention(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<DataRetentionOptions>(configuration.GetSection(DataRetentionOptions.SectionName));
+        services.AddScoped<IExpiredDataPurger, DatabaseExpiredDataPurger>();
+        services.AddHostedService<ExpiredDataSweeper>();
+    }
+
+    private static void AddLoginThrottle(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<LoginThrottleOptions>()
+            .Bind(configuration.GetSection(LoginThrottleOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        services.AddScoped<ILoginThrottle, DatabaseLoginThrottle>();
     }
 
     private static void AddEmailConfirmationOptions(this IServiceCollection services, IConfiguration configuration) =>

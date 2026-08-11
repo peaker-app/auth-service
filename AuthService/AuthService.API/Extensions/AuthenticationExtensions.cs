@@ -1,4 +1,6 @@
 using AuthService.Infrastructure.Security;
+using Common.API.Security;
+using Common.Application.Abstractions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -14,7 +16,7 @@ internal static class AuthenticationExtensions
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
             .Configure<SigningKeyProvider, IOptions<AuthTokenOptions>>(ConfigureJwtBearer);
 
-        services.AddAuthorization();
+        services.AddCommonAuthorization();
 
         return services;
     }
@@ -37,6 +39,7 @@ internal static class AuthenticationExtensions
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = signingKeyProvider.CreatePublicSecurityKey(),
             NameClaimType = "sub",
+            RoleClaimType = PeakerRoles.ClaimType,
             ClockSkew = TimeSpan.FromSeconds(30)
         };
     }

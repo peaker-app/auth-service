@@ -72,7 +72,7 @@ public sealed class SmtpConfirmationEmailSenderTests : IAsyncLifetime
                 FromName = "Peaker",
                 ConfirmationLinkTemplate = "https://peaker.io/confirm-email?token={token}"
             }),
-            Options.Create(transport),
+            new SmtpMailer(Options.Create(transport)),
             NullLogger<SmtpConfirmationEmailSender>.Instance);
 
     private async Task<JsonElement> FetchOnlyMessageAsync()

@@ -10,41 +10,81 @@ internal sealed class RegisterUserCommandHandler(
     IUserRepository userRepository,
     IPasswordHasher passwordHasher,
     IBreachedPasswordChecker breachedPasswordChecker,
-    IUnitOfWork unitOfWork) : ICommandHandler<RegisterUserCommand, Guid>
+    IEmailPseudonymizer emailPseudonymizer,
+    ITermsPolicy termsPolicy,
+    IDateTimeProvider dateTimeProvider,
+    IUnitOfWork unitOfWork) : ICommandHandler<RegisterUserCommand>
 {
-    public async Task<Result<Guid>> Handle(RegisterUserCommand command, CancellationToken cancellationToken)
+    public async Task<Result> Handle(RegisterUserCommand command, CancellationToken cancellationToken)
     {
-        Result<Email> email = Email.Create(command.Email);
-        if (email.IsFailure) return Result.Failure<Guid>(email.Error);
+        Result<Credentials> credentials = Credentials.Create(command.Email, command.Username);
 
-        Result<Username> username = Username.Create(command.Username);
-        if (username.IsFailure) return Result.Failure<Guid>(username.Error);
+        if (credentials.IsFailure)
+        {
+            return Result.Failure(credentials.Error);
+        }
 
-        Result availability = await EnsureAvailableAsync(email.Value, username.Value, cancellationToken);
-        if (availability.IsFailure) return Result.Failure<Guid>(availability.Error);
+        if (await userRepository.ExistsByUsernameAsync(credentials.Value.Username, cancellationToken))
+        {
+            return Result.Failure(UserErrors.UsernameAlreadyRegistered);
+        }
 
-        if (await breachedPasswordChecker.IsBreachedAsync(command.Password, cancellationToken))
-            return Result.Failure<Guid>(UserErrors.PasswordBreached);
-
-        Result<User> user = User.Register(email.Value, username.Value, passwordHasher.Hash(command.Password));
-        if (user.IsFailure) return Result.Failure<Guid>(user.Error);
-
-        userRepository.Add(user.Value);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        return user.Value.Id;
+        return await breachedPasswordChecker.IsBreachedAsync(command.Password, cancellationToken)
+            ? Result.Failure(UserErrors.PasswordBreached)
+            : await AcceptAsync(credentials.Value, command.Password, cancellationToken);
     }
 
-    private async Task<Result> EnsureAvailableAsync(
-        Email email,
-        Username username,
+    private async Task<Result> AcceptAsync(
+        Credentials credentials,
+        string password,
         CancellationToken cancellationToken)
     {
-        if (await userRepository.ExistsByEmailAsync(email, cancellationToken))
-            return Result.Failure(UserErrors.EmailAlreadyRegistered);
+        User? existing = await userRepository.GetByEmailAsync(credentials.Email, cancellationToken);
 
-        return await userRepository.ExistsByUsernameAsync(username, cancellationToken)
-            ? Result.Failure(UserErrors.UsernameAlreadyRegistered)
-            : Result.Success();
+        if (existing is not null)
+        {
+            existing.RecordDuplicateRegistrationAttempt();
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+
+            return Result.Success();
+        }
+
+        if (await WasUsedByADeletedAccountAsync(credentials.Email, cancellationToken))
+        {
+            return Result.Success();
+        }
+
+        Result<User> user = User.Register(BuildDraft(credentials, password));
+
+        return user.IsFailure
+            ? Result.Failure(user.Error)
+            : await PersistAsync(user.Value, cancellationToken);
+    }
+
+    private UserDraft BuildDraft(Credentials credentials, string password) => new(
+        credentials.Email,
+        credentials.Username,
+        passwordHasher.Hash(password),
+        TermsAcceptance.Of(termsPolicy.CurrentVersion, dateTimeProvider.UtcNow));
+
+    private Task<bool> WasUsedByADeletedAccountAsync(Email email, CancellationToken cancellationToken) =>
+        userRepository.ExistsByEmailAsync(emailPseudonymizer.Pseudonymize(email), cancellationToken);
+
+    private async Task<Result> PersistAsync(User user, CancellationToken cancellationToken)
+    {
+        userRepository.Add(user);
+
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DuplicateCredentialException exception)
+        {
+            return exception.Field is CredentialField.Username
+                ? Result.Failure(UserErrors.UsernameAlreadyRegistered)
+                : Result.Success();
+        }
+
+        return Result.Success();
     }
 }

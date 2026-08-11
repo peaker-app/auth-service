@@ -1,3 +1,4 @@
+using AuthService.Domain.EmailConfirmations;
 using AuthService.Domain.Users;
 using Common.Application.Messaging;
 using Common.Domain.Results;
@@ -22,6 +23,10 @@ internal sealed class IssueEmailConfirmationCommandHandler(
             return Result.Success();
         }
 
-        return await emailConfirmationIssuer.IssueAsync(user, cancellationToken);
+        Result issued = await emailConfirmationIssuer.IssueAsync(user, cancellationToken);
+
+        return issued.IsFailure && issued.Error == EmailConfirmationErrors.RecipientQuotaExceeded
+            ? Result.Success()
+            : issued;
     }
 }

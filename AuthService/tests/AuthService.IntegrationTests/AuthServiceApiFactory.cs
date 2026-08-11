@@ -1,5 +1,6 @@
 using System.Globalization;
 using AuthService.Application.Abstractions;
+using AuthService.Domain.Users;
 using AuthService.Infrastructure.Persistence;
 using AuthService.IntegrationTests.Fakes;
 using Common.Infrastructure.Persistence.Outbox;
@@ -27,6 +28,127 @@ public sealed class AuthServiceApiFactory : WebApplicationFactory<Program>, IAsy
     private readonly RabbitMqContainer _rabbitMq = new RabbitMqBuilder("rabbitmq:3-management-alpine").Build();
 
     internal RecordingConfirmationEmailSender ConfirmationEmails { get; } = new();
+
+    internal RecordingExistingAccountEmailSender ExistingAccountEmailSender { get; } = new();
+
+    internal RecordingPasswordResetEmailSender PasswordResetEmails { get; } = new();
+
+    public async Task<int> CountUsersByEmailAsync(string email)
+    {
+        Email parsed = Email.Create(email).Value;
+
+        await using AsyncServiceScope scope = Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+
+        return await context.Users.AsNoTracking().CountAsync(user => user.Email == parsed);
+    }
+
+    public async Task<Guid> FindUserIdByEmailAsync(string email)
+    {
+        Email parsed = Email.Create(email).Value;
+
+        await using AsyncServiceScope scope = Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+
+        return await context.Users
+            .AsNoTracking()
+            .Where(user => user.Email == parsed)
+            .Select(user => user.Id)
+            .FirstAsync();
+    }
+
+    public async Task<bool> IsEmailPseudonymizedAsync(Guid userId)
+    {
+        await using AsyncServiceScope scope = Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+
+        User user = await context.Users.AsNoTracking().SingleAsync(candidate => candidate.Id == userId);
+
+        return user.Email.Value.StartsWith("deleted+", StringComparison.Ordinal) &&
+               user.Email.Value.EndsWith("@peaker.invalid", StringComparison.Ordinal);
+    }
+
+    public async Task GrantAdminAsync(Guid userId)
+    {
+        await using AsyncServiceScope scope = Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+
+        User user = await context.Users.SingleAsync(candidate => candidate.Id == userId);
+        user.Grant(UserRole.Admin);
+
+        await context.SaveChangesAsync();
+    }
+
+    public async Task LockAsync(Guid userId)
+    {
+        await using AsyncServiceScope scope = Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+
+        User user = await context.Users.SingleAsync(candidate => candidate.Id == userId);
+        user.Lock();
+
+        await context.SaveChangesAsync();
+    }
+
+    public async Task<bool> IsInRoleAsync(Guid userId, UserRole role)
+    {
+        await using AsyncServiceScope scope = Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+
+        User? user = await context.Users.AsNoTracking().SingleOrDefaultAsync(candidate => candidate.Id == userId);
+
+        return user is not null && user.IsInRole(role);
+    }
+
+    public async Task<string> GetStatusAsync(Guid userId)
+    {
+        await using AsyncServiceScope scope = Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+
+        return await context.Users
+            .AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => user.Status.ToString())
+            .FirstAsync();
+    }
+
+    public async Task<(string Version, DateTime AcceptedAtUtc)> GetTermsAcceptanceAsync(Guid userId)
+    {
+        await using AsyncServiceScope scope = Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+
+        User user = await context.Users.AsNoTracking().SingleAsync(candidate => candidate.Id == userId);
+
+        return (user.AcceptedTerms.Version, user.AcceptedTerms.AcceptedAtUtc);
+    }
+
+    public async Task<int> CountLoginAttemptsAsync()
+    {
+        await using AsyncServiceScope scope = Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+
+        return await context.Set<LoginAttempt>().CountAsync();
+    }
+
+    public async Task SeedEmailDispatchesAsync(string email, int count)
+    {
+        await using AsyncServiceScope scope = Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+
+        string recipientHash = SubjectHash.Of(email);
+
+        for (int index = 0; index < count; index++)
+        {
+            context.Set<EmailDispatch>().Add(new EmailDispatch
+            {
+                Id = Guid.CreateVersion7(),
+                RecipientHash = recipientHash,
+                SentAtUtc = DateTime.UtcNow.AddMinutes(-index)
+            });
+        }
+
+        await context.SaveChangesAsync();
+    }
 
     public async Task ExpireConfirmationTokensAsync(Guid userId)
     {
@@ -92,6 +214,12 @@ public sealed class AuthServiceApiFactory : WebApplicationFactory<Program>, IAsy
 
             services.RemoveAll<IConfirmationEmailSender>();
             services.AddSingleton<IConfirmationEmailSender>(ConfirmationEmails);
+
+            services.RemoveAll<IExistingAccountEmailSender>();
+            services.AddSingleton<IExistingAccountEmailSender>(ExistingAccountEmailSender);
+
+            services.RemoveAll<IPasswordResetEmailSender>();
+            services.AddSingleton<IPasswordResetEmailSender>(PasswordResetEmails);
         });
     }
 

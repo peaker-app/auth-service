@@ -19,5 +19,9 @@ internal sealed class RegisterUserCommandValidator : AbstractValidator<RegisterU
         RuleFor(command => command.Password)
             .NotEmpty()
             .MinimumLength(MinimumPasswordLength);
+
+        RuleFor(command => command.AcceptedTerms)
+            .Equal(true)
+            .WithMessage("Hay que aceptar las condiciones de uso para crear la cuenta.");
     }
 }

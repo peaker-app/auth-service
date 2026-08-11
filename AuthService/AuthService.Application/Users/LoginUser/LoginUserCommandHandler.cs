@@ -11,6 +11,7 @@ internal sealed class LoginUserCommandHandler(
     IUserRepository userRepository,
     IPasswordHasher passwordHasher,
     IAuthTokenIssuer tokenIssuer,
+    ILoginThrottle loginThrottle,
     IUnitOfWork unitOfWork,
     IDateTimeProvider dateTimeProvider) : ICommandHandler<LoginUserCommand, AuthTokensResponse>
 {
@@ -18,21 +19,23 @@ internal sealed class LoginUserCommandHandler(
 
     public async Task<Result<AuthTokensResponse>> Handle(LoginUserCommand command, CancellationToken cancellationToken)
     {
-        User? user = await ResolveUserAsync(command.Identifier, cancellationToken);
-        DateTime utcNow = dateTimeProvider.UtcNow;
+        LoginThrottleVerdict verdict = await loginThrottle.EvaluateAsync(
+            command.Identifier, command.IpAddress, cancellationToken);
 
-        // Motivo: la verificación se ejecuta siempre, incluso sin usuario o con la cuenta bloqueada,
-        // para que el fallo tarde lo mismo en los tres casos (DESIGN.md §4.3).
+        if (!verdict.IsAllowed)
+        {
+            return Result.Failure<AuthTokensResponse>(UserErrors.TooManyAttempts);
+        }
+
+        User? user = await ResolveUserAsync(command.Identifier, cancellationToken);
         bool passwordMatches = passwordHasher.Verify(command.Password, user?.PasswordHash);
 
-        if (user is null || !passwordMatches || !user.CanSignIn(utcNow))
-            return await FailAsync(user, utcNow, cancellationToken);
+        if (user is null || !passwordMatches || !user.CanSignIn)
+        {
+            return await FailAsync(command, cancellationToken);
+        }
 
-        user.RecordSuccessfulLogin();
-        IssuedTokens issued = tokenIssuer.Issue(user, utcNow, command.IpAddress);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        return issued.Response;
+        return await SucceedAsync(user, command, cancellationToken);
     }
 
     private async Task<User?> ResolveUserAsync(string identifier, CancellationToken cancellationToken)
@@ -54,16 +57,24 @@ internal sealed class LoginUserCommandHandler(
     }
 
     private async Task<Result<AuthTokensResponse>> FailAsync(
-        User? user,
-        DateTime utcNow,
+        LoginUserCommand command,
         CancellationToken cancellationToken)
     {
-        if (user is not null)
-        {
-            user.RecordFailedLogin(utcNow);
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
+        await loginThrottle.RecordFailureAsync(command.Identifier, command.IpAddress, cancellationToken);
 
         return Result.Failure<AuthTokensResponse>(UserErrors.InvalidCredentials);
+    }
+
+    private async Task<Result<AuthTokensResponse>> SucceedAsync(
+        User user,
+        LoginUserCommand command,
+        CancellationToken cancellationToken)
+    {
+        IssuedTokens issued = tokenIssuer.Issue(user, dateTimeProvider.UtcNow, command.IpAddress);
+
+        await loginThrottle.ClearAsync(command.Identifier, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return issued.Response;
     }
 }

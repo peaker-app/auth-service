@@ -15,11 +15,19 @@ internal sealed class EmailConfirmationIssuer(
     IEmailConfirmationTokenRepository tokenRepository,
     IEmailConfirmationTokenGenerator tokenGenerator,
     IConfirmationEmailSender confirmationEmailSender,
+    IEmailQuota emailQuota,
     IUnitOfWork unitOfWork,
     IDateTimeProvider dateTimeProvider) : IEmailConfirmationIssuer
 {
     public async Task<Result> IssueAsync(User user, CancellationToken cancellationToken)
     {
+        EmailQuotaVerdict verdict = await emailQuota.TryReserveAsync(user.Email.Value, cancellationToken);
+
+        if (verdict is not EmailQuotaVerdict.Allowed)
+        {
+            return Result.Failure(EmailQuotaErrors.For(verdict));
+        }
+
         DateTime utcNow = dateTimeProvider.UtcNow;
 
         await InvalidateActiveTokensAsync(user.Id, utcNow, cancellationToken);
