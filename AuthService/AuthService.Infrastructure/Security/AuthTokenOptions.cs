@@ -13,4 +13,6 @@ public sealed class AuthTokenOptions
     public TimeSpan RefreshTokenLifetime { get; init; } = TimeSpan.FromDays(7);
 
     public string? PrivateKeyPem { get; init; }
+
+    public string? PreviousPrivateKeyPem { get; init; }
 }

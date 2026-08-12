@@ -1,5 +1,6 @@
 using System.Net;
 using FluentAssertions;
+using Microsoft.IdentityModel.Tokens;
 using Xunit;
 
 namespace AuthService.IntegrationTests.Endpoints;
@@ -26,6 +27,16 @@ public sealed class JwksEndpointTests(AuthServiceApiFactory factory)
         string body = await response.Content.ReadAsStringAsync();
 
         body.Should().Contain("\"keys\"");
+    }
+
+    [Fact]
+    public async Task JsonWebKeySet_IdentifiesEveryKeyByItsKeyId()
+    {
+        using HttpResponseMessage response = await _client.GetAsync("/.well-known/jwks.json");
+        JsonWebKeySet keySet = new(await response.Content.ReadAsStringAsync());
+
+        keySet.Keys.Should().NotBeEmpty()
+            .And.OnlyContain(key => !string.IsNullOrWhiteSpace(key.Kid));
     }
 
     [Fact]

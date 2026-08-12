@@ -10,10 +10,9 @@ internal sealed class TokenMetadataProvider(
 {
     public string Issuer => options.Value.Issuer;
 
-    public IReadOnlyCollection<JsonWebKeyResponse> GetSigningKeys()
-    {
-        JsonWebKey key = signingKeyProvider.CreatePublicJsonWebKey();
-
-        return [new JsonWebKeyResponse(key.Kty, key.Use, key.Kid, key.Alg, key.N, key.E)];
-    }
+    public IReadOnlyCollection<JsonWebKeyResponse> GetSigningKeys() =>
+    [
+        .. signingKeyProvider.CreatePublicJsonWebKeys()
+            .Select(key => new JsonWebKeyResponse(key.Kty, key.Use, key.Kid, key.Alg, key.N, key.E))
+    ];
 }

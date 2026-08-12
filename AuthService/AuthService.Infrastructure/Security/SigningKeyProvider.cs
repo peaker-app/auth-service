@@ -9,35 +9,32 @@ public sealed class SigningKeyProvider : IDisposable
 {
     private const int EphemeralKeySizeBits = 2048;
 
-    private readonly RSA _rsa;
+    private readonly SigningKey _current;
+    private readonly SigningKey? _previous;
 
     public SigningKeyProvider(IOptions<AuthTokenOptions> options, ILogger<SigningKeyProvider> logger)
     {
-        _rsa = CreateKey(options.Value.PrivateKeyPem, logger);
-        KeyId = CreateKeyId(_rsa);
+        _current = new SigningKey(CreateKey(options.Value.PrivateKeyPem, logger));
+        _previous = CreatePreviousKey(options.Value.PreviousPrivateKeyPem, _current.KeyId);
     }
 
-    public string KeyId { get; }
+    public string KeyId => _current.KeyId;
 
-    public SigningCredentials CreateSigningCredentials() =>
-        new(new RsaSecurityKey(_rsa) { KeyId = KeyId }, SecurityAlgorithms.RsaSha256);
+    public SigningCredentials CreateSigningCredentials() => _current.CreateSigningCredentials();
 
-    public RsaSecurityKey CreatePublicSecurityKey() =>
-        new(_rsa.ExportParameters(includePrivateParameters: false)) { KeyId = KeyId };
+    public IReadOnlyCollection<RsaSecurityKey> CreatePublicSecurityKeys() =>
+        [.. PublishedKeys.Select(key => key.CreatePublicSecurityKey())];
 
-    public JsonWebKey CreatePublicJsonWebKey()
+    public IReadOnlyCollection<JsonWebKey> CreatePublicJsonWebKeys() =>
+        [.. PublishedKeys.Select(key => key.CreatePublicJsonWebKey())];
+
+    public void Dispose()
     {
-        RSAParameters publicParameters = _rsa.ExportParameters(includePrivateParameters: false);
-        RsaSecurityKey publicKey = new(publicParameters) { KeyId = KeyId };
-
-        JsonWebKey jsonWebKey = JsonWebKeyConverter.ConvertFromRSASecurityKey(publicKey);
-        jsonWebKey.Use = "sig";
-        jsonWebKey.Alg = SecurityAlgorithms.RsaSha256;
-
-        return jsonWebKey;
+        _current.Dispose();
+        _previous?.Dispose();
     }
 
-    public void Dispose() => _rsa.Dispose();
+    private IEnumerable<SigningKey> PublishedKeys => _previous is null ? [_current] : [_current, _previous];
 
     private static RSA CreateKey(string? privateKeyPem, ILogger logger)
     {
@@ -49,6 +46,29 @@ public sealed class SigningKeyProvider : IDisposable
             return RSA.Create(EphemeralKeySizeBits);
         }
 
+        return ImportKey(privateKeyPem);
+    }
+
+    private static SigningKey? CreatePreviousKey(string? privateKeyPem, string currentKeyId)
+    {
+        if (string.IsNullOrWhiteSpace(privateKeyPem))
+        {
+            return null;
+        }
+
+        SigningKey key = new(ImportKey(privateKeyPem));
+        if (!string.Equals(key.KeyId, currentKeyId, StringComparison.Ordinal))
+        {
+            return key;
+        }
+
+        key.Dispose();
+
+        return null;
+    }
+
+    private static RSA ImportKey(string privateKeyPem)
+    {
         RSA rsa = RSA.Create();
 
         try
@@ -62,12 +82,5 @@ public sealed class SigningKeyProvider : IDisposable
         }
 
         return rsa;
-    }
-
-    private static string CreateKeyId(RSA rsa)
-    {
-        byte[] hash = SHA256.HashData(rsa.ExportRSAPublicKey());
-
-        return Base64UrlEncoder.Encode(hash)[..16];
     }
 }

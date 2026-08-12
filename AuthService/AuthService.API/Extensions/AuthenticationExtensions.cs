@@ -37,7 +37,7 @@ internal static class AuthenticationExtensions
             ValidAudience = settings.Audience,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = signingKeyProvider.CreatePublicSecurityKey(),
+            IssuerSigningKeys = signingKeyProvider.CreatePublicSecurityKeys(),
             NameClaimType = "sub",
             RoleClaimType = PeakerRoles.ClaimType,
             ClockSkew = TimeSpan.FromSeconds(30)
