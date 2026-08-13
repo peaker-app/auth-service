@@ -12,7 +12,7 @@ namespace AuthService.IntegrationTests.Security;
 public sealed class SigningKeyProviderTests
 {
     private const string Issuer = "peaker-auth";
-    private const string Audience = "peaker-api";
+    private const string Audience = "peaker-auth";
 
     [Fact]
     public void KeyId_WithTheSameConfiguredKey_IsStableAcrossInstances()

@@ -20,10 +20,18 @@ internal sealed class RsaJwtTokenGenerator(
         DateTime issuedAt = dateTimeProvider.UtcNow;
         DateTime expiresAt = issuedAt.Add(settings.AccessTokenLifetime);
 
+        string token = TokenHandler.CreateToken(CreateDescriptor(user, issuedAt, expiresAt));
+
+        return new GeneratedAccessToken(token, expiresAt, (int)settings.AccessTokenLifetime.TotalSeconds);
+    }
+
+    private SecurityTokenDescriptor CreateDescriptor(User user, DateTime issuedAt, DateTime expiresAt)
+    {
+        AuthTokenOptions settings = options.Value;
+
         SecurityTokenDescriptor descriptor = new()
         {
             Issuer = settings.Issuer,
-            Audience = settings.Audience,
             IssuedAt = issuedAt,
             NotBefore = issuedAt,
             Expires = expiresAt,
@@ -31,9 +39,12 @@ internal sealed class RsaJwtTokenGenerator(
             SigningCredentials = signingKeyProvider.CreateSigningCredentials()
         };
 
-        string token = TokenHandler.CreateToken(descriptor);
+        foreach (string audience in settings.Audiences)
+        {
+            descriptor.Audiences.Add(audience);
+        }
 
-        return new GeneratedAccessToken(token, expiresAt, (int)settings.AccessTokenLifetime.TotalSeconds);
+        return descriptor;
     }
 
     private static Dictionary<string, object> BuildClaims(User user) => new()

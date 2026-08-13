@@ -6,7 +6,9 @@ public sealed class AuthTokenOptions
 
     public string Issuer { get; init; } = "peaker-auth";
 
-    public string Audience { get; init; } = "peaker-api";
+    public IReadOnlyList<string> Audiences { get; init; } = [];
+
+    public string SelfAudience { get; init; } = string.Empty;
 
     public TimeSpan AccessTokenLifetime { get; init; } = TimeSpan.FromMinutes(15);
 
