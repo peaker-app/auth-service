@@ -43,12 +43,10 @@ public static class DependencyInjection
     {
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddSingleton<AuditableEntityInterceptor>();
-        services.AddSingleton<OutboxInterceptor>();
-        services.Configure<OutboxOptions>(configuration.GetSection(OutboxOptions.SectionName));
+        services.AddCommonOutbox<AuthDbContext>(configuration);
 
         services.AddAuthDbContext();
         services.AddRepositories();
-        services.AddHostedService<OutboxProcessor<AuthDbContext>>();
     }
 
     private static void AddAuthDbContext(this IServiceCollection services)

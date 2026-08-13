@@ -173,6 +173,52 @@ public sealed class AuthServiceApiFactory : WebApplicationFactory<Program>, IAsy
             .FirstOrDefaultAsync();
     }
 
+    public async Task<Guid> PoisonTheOutboxAsync()
+    {
+        await using AsyncServiceScope scope = Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+
+        OutboxMessage poisoned = new()
+        {
+            Id = Guid.CreateVersion7(),
+            Type = "AuthService.Domain.Users.Events.ThereIsNoSuchEvent, AuthService.Domain",
+            Content = "{}",
+            OccurredAtUtc = DateTime.UtcNow.AddYears(-1)
+        };
+
+        context.Set<OutboxMessage>().Add(poisoned);
+        await context.SaveChangesAsync();
+
+        return poisoned.Id;
+    }
+
+    public async Task<OutboxMessage?> WaitForParkedOutboxMessageAsync(Guid messageId)
+    {
+        for (int attempt = 0; attempt < 20; attempt++)
+        {
+            OutboxMessage? message = await ReadOutboxMessageAsync(messageId);
+
+            if (message is { AttemptCount: >= 2 })
+            {
+                return message;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500));
+        }
+
+        return await ReadOutboxMessageAsync(messageId);
+    }
+
+    private async Task<OutboxMessage?> ReadOutboxMessageAsync(Guid messageId)
+    {
+        await using AsyncServiceScope scope = Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+
+        return await context.Set<OutboxMessage>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(message => message.Id == messageId);
+    }
+
     public async Task<bool> WaitForOutboxProcessedAsync(Guid subjectId, string eventTypeName)
     {
         for (int attempt = 0; attempt < 20; attempt++)
@@ -236,7 +282,10 @@ public sealed class AuthServiceApiFactory : WebApplicationFactory<Program>, IAsy
             ["Messaging:Username"] = credentials[0],
             ["Messaging:Password"] = credentials[1],
             ["Messaging:VirtualHost"] = "/",
-            ["Outbox:PollingInterval"] = "00:00:01"
+            ["Outbox:PollingInterval"] = "00:00:01",
+            ["Outbox:MaxAttempts"] = "2",
+            ["Outbox:RetryBackoffBase"] = "00:00:01",
+            ["Outbox:RetryBackoffCap"] = "00:00:01"
         };
     }
 
