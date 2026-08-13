@@ -34,7 +34,7 @@ internal static class AuthenticationExtensions
             ValidateIssuer = true,
             ValidIssuer = settings.Issuer,
             ValidateAudience = true,
-            ValidAudience = settings.Audience,
+            ValidAudience = settings.SelfAudience,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             IssuerSigningKeys = signingKeyProvider.CreatePublicSecurityKeys(),

@@ -43,12 +43,10 @@ public static class DependencyInjection
     {
         services.AddSingleton<IDateTimeProvider, DateTimeProvider>();
         services.AddSingleton<AuditableEntityInterceptor>();
-        services.AddSingleton<OutboxInterceptor>();
-        services.Configure<OutboxOptions>(configuration.GetSection(OutboxOptions.SectionName));
+        services.AddCommonOutbox<AuthDbContext>(configuration);
 
         services.AddAuthDbContext();
         services.AddRepositories();
-        services.AddHostedService<OutboxProcessor<AuthDbContext>>();
     }
 
     private static void AddAuthDbContext(this IServiceCollection services)
@@ -117,6 +115,11 @@ public static class DependencyInjection
                     environment.IsDevelopment() || !string.IsNullOrWhiteSpace(options.PrivateKeyPem),
                 $"'{AuthTokenOptions.SectionName}:{nameof(AuthTokenOptions.PrivateKeyPem)}' es obligatorio fuera de " +
                 "Development: sin él cada réplica firmaría con una clave distinta y efímera.")
+            .Validate(
+                options => options.Audiences.Contains(options.SelfAudience, StringComparer.Ordinal),
+                $"'{AuthTokenOptions.SectionName}:{nameof(AuthTokenOptions.SelfAudience)}' debe ser una de las " +
+                $"audiencias de '{AuthTokenOptions.SectionName}:{nameof(AuthTokenOptions.Audiences)}': si no, " +
+                "auth-service rechazaría los tokens que él mismo emite.")
             .ValidateOnStart();
 
     private static void AddConfirmationEmailSender(this IServiceCollection services, IConfiguration configuration)
