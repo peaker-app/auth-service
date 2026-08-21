@@ -145,6 +145,19 @@ internal static class ApiTestHelpers
         return await client.SendWithBearerAsync(request, accessToken);
     }
 
+    public static async Task<HttpResponseMessage> GrantRoleWithEmptyBodyAsync(
+        this HttpClient client,
+        string? accessToken,
+        Guid userId)
+    {
+        using HttpRequestMessage request = new(HttpMethod.Post, $"/api/admin/users/{userId}/roles")
+        {
+            Content = JsonContent.Create(new { })
+        };
+
+        return await client.SendWithBearerAsync(request, accessToken);
+    }
+
     public static Task<HttpResponseMessage> RevokeRoleAsync(
         this HttpClient client,
         string? accessToken,

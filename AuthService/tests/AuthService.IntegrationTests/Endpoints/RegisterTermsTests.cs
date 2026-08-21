@@ -40,6 +40,24 @@ public sealed class RegisterTermsTests(AuthServiceApiFactory factory)
     }
 
     [Fact]
+    public async Task Register_WithoutTheTermsFieldInTheBody_ReturnsBadRequestAndCreatesNoAccount()
+    {
+        string email = ApiTestHelpers.UniqueEmail();
+
+        using HttpResponseMessage response = await _client.PostAsJsonAsync(
+            "/api/auth/register",
+            new
+            {
+                email,
+                username = ApiTestHelpers.UniqueUsername(),
+                password = ApiTestHelpers.DefaultPassword
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await factory.CountUsersByEmailAsync(email)).Should().Be(0);
+    }
+
+    [Fact]
     public async Task Register_WithoutAcceptingTheTerms_CreatesNoAccount()
     {
         string email = ApiTestHelpers.UniqueEmail();

@@ -1,5 +1,6 @@
 using AuthService.Application.Abstractions;
 using AuthService.Application.Authentication;
+using AuthService.Application.PasswordResets;
 using AuthService.Application.PasswordResets.ResetPassword;
 using AuthService.Application.UnitTests.TestData;
 using AuthService.Domain.PasswordResets;
@@ -35,14 +36,12 @@ public sealed class ResetPasswordCommandHandlerTests
         _tokenGenerator.Hash(Command.Token).Returns("reset-hash");
         _passwordHasher.Hash(Command.NewPassword).Returns("argon2id$new");
         _handler = new ResetPasswordCommandHandler(
-            _tokenRepository,
+            new PasswordResetTokenRedeemer(_tokenRepository, _tokenGenerator, _dateTimeProvider),
             _userRepository,
-            _tokenGenerator,
             _passwordHasher,
             _breachedPasswordChecker,
             _sessionRevoker,
-            _unitOfWork,
-            _dateTimeProvider);
+            _unitOfWork);
     }
 
     [Fact]

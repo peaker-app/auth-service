@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.AddScoped<IAuthTokenIssuer, AuthTokenIssuer>();
         services.AddScoped<IEmailConfirmationIssuer, EmailConfirmationIssuer>();
         services.AddScoped<IPasswordResetIssuer, PasswordResetIssuer>();
+        services.AddScoped<IPasswordResetTokenRedeemer, PasswordResetTokenRedeemer>();
         services.AddScoped<ISessionRevoker, SessionRevoker>();
 
         return services;
