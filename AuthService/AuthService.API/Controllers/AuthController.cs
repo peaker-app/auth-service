@@ -2,6 +2,7 @@ using AuthService.API.Requests;
 using AuthService.Application.Authentication;
 using AuthService.Application.EmailConfirmations.ResendEmailConfirmation;
 using AuthService.Application.Users.ExportMyData;
+using AuthService.Application.Users.LogoutAllSessions;
 using Common.API.Results;
 using Common.Application.Abstractions;
 using Common.Domain.Results;
@@ -111,6 +112,18 @@ public sealed class AuthController(ISender sender, IUserContext userContext) : C
     public async Task<IActionResult> Logout(LogoutRequest request, CancellationToken cancellationToken)
     {
         Result result = await sender.Send(request.ToCommand(userContext.UserId), cancellationToken);
+
+        return result.ToActionResult();
+    }
+
+    [HttpPost("logout/all")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> LogoutAllSessions(CancellationToken cancellationToken)
+    {
+        Result result = await sender.Send(
+            new LogoutAllSessionsCommand(userContext.UserId), cancellationToken);
 
         return result.ToActionResult();
     }
