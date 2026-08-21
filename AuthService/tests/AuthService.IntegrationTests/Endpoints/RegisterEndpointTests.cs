@@ -18,19 +18,18 @@ public sealed class RegisterEndpointTests(AuthServiceApiFactory factory)
     }
 
     [Fact]
-    public async Task Register_WithDuplicateEmail_ReturnsTheSameAcceptedResponseAsANewAccount()
+    public async Task Register_WithDuplicateEmail_ReturnsConflict()
     {
         RegisteredUser existing = await _client.RegisterUserAsync();
 
-        using HttpResponseMessage fresh = await _client.RegisterAsync(ApiTestHelpers.NewUser());
         using HttpResponseMessage duplicate = await _client.RegisterAsync(
             existing with { Username = ApiTestHelpers.UniqueUsername() });
 
-        duplicate.StatusCode.Should().Be(fresh.StatusCode);
+        duplicate.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
     [Fact]
-    public async Task Register_WithDuplicateEmail_ReturnsAnEmptyBodyJustLikeANewAccount()
+    public async Task Register_WithDuplicateEmail_NamesTheEmailInTheProblemDetail()
     {
         RegisteredUser existing = await _client.RegisterUserAsync();
 
@@ -38,7 +37,7 @@ public sealed class RegisterEndpointTests(AuthServiceApiFactory factory)
             existing with { Username = ApiTestHelpers.UniqueUsername() });
 
         string body = await duplicate.Content.ReadAsStringAsync();
-        body.Should().BeEmpty();
+        body.Should().Contain("User.EmailAlreadyRegistered");
     }
 
     [Fact]
@@ -54,17 +53,16 @@ public sealed class RegisterEndpointTests(AuthServiceApiFactory factory)
     }
 
     [Fact]
-    public async Task Register_WithDuplicateEmail_SendsTheExistingAccountNoticeInstead()
+    public async Task Register_WithTheEmailOfADeletedAccount_ReturnsConflict()
     {
-        RegisteredUser existing = await _client.RegisterUserAsync();
-        await factory.ConfirmationEmails.WaitForTokenAsync(existing.Email);
-        factory.ExistingAccountEmailSender.Clear();
+        RegisteredUser user = await _client.RegisterUserAsync();
+        TokenPair tokens = await _client.LoginWithTokensAsync(user.Email);
+        (await _client.DeleteAccountAsync(tokens.AccessToken)).EnsureSuccessStatusCode();
 
-        using HttpResponseMessage duplicate = await _client.RegisterAsync(
-            existing with { Username = ApiTestHelpers.UniqueUsername() });
+        using HttpResponseMessage response = await _client.RegisterAsync(
+            new RegisteredUser(user.Email, ApiTestHelpers.UniqueUsername()));
 
-        bool notified = await factory.ExistingAccountEmailSender.WaitForNoticeAsync(existing.Email);
-        notified.Should().BeTrue();
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
     [Fact]

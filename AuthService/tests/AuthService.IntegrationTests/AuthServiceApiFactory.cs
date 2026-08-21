@@ -29,8 +29,6 @@ public sealed class AuthServiceApiFactory : WebApplicationFactory<Program>, IAsy
 
     internal RecordingConfirmationEmailSender ConfirmationEmails { get; } = new();
 
-    internal RecordingExistingAccountEmailSender ExistingAccountEmailSender { get; } = new();
-
     internal RecordingPasswordResetEmailSender PasswordResetEmails { get; } = new();
 
     public async Task<int> CountUsersByEmailAsync(string email)
@@ -260,9 +258,6 @@ public sealed class AuthServiceApiFactory : WebApplicationFactory<Program>, IAsy
 
             services.RemoveAll<IConfirmationEmailSender>();
             services.AddSingleton<IConfirmationEmailSender>(ConfirmationEmails);
-
-            services.RemoveAll<IExistingAccountEmailSender>();
-            services.AddSingleton<IExistingAccountEmailSender>(ExistingAccountEmailSender);
 
             services.RemoveAll<IPasswordResetEmailSender>();
             services.AddSingleton<IPasswordResetEmailSender>(PasswordResetEmails);
