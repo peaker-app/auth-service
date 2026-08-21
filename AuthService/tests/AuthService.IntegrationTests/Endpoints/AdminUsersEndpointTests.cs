@@ -160,6 +160,19 @@ public sealed class AdminUsersEndpointTests(AuthServiceApiFactory factory)
     }
 
     [Fact]
+    public async Task GrantRole_WithoutARoleInTheBody_ReturnsBadRequestAndDoesNotPromote()
+    {
+        string adminToken = await SignInAsAdminAsync();
+        RegisteredUser target = await _client.RegisterUserAsync();
+        Guid targetId = await factory.FindUserIdByEmailAsync(target.Email);
+
+        using HttpResponseMessage response = await _client.GrantRoleWithEmptyBodyAsync(adminToken, targetId);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await factory.IsInRoleAsync(targetId, UserRole.Admin)).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task RevokeRole_WithAnAdminAccount_DemotesAnotherAdmin()
     {
         string adminToken = await SignInAsAdminAsync();

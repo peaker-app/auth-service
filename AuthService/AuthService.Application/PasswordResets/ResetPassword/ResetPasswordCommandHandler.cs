@@ -9,30 +9,20 @@ using Common.Domain.Results;
 namespace AuthService.Application.PasswordResets.ResetPassword;
 
 internal sealed class ResetPasswordCommandHandler(
-    IPasswordResetTokenRepository tokenRepository,
+    IPasswordResetTokenRedeemer tokenRedeemer,
     IUserRepository userRepository,
-    IPasswordResetTokenGenerator tokenGenerator,
     IPasswordHasher passwordHasher,
     IBreachedPasswordChecker breachedPasswordChecker,
     ISessionRevoker sessionRevoker,
-    IUnitOfWork unitOfWork,
-    IDateTimeProvider dateTimeProvider) : ICommandHandler<ResetPasswordCommand>
+    IUnitOfWork unitOfWork) : ICommandHandler<ResetPasswordCommand>
 {
     public async Task<Result> Handle(ResetPasswordCommand command, CancellationToken cancellationToken)
     {
-        string tokenHash = tokenGenerator.Hash(command.Token);
-        PasswordResetToken? token = await tokenRepository.GetByTokenHashAsync(tokenHash, cancellationToken);
+        Result<Guid> redemption = await tokenRedeemer.RedeemAsync(command.Token, cancellationToken);
 
-        if (token is null)
-        {
-            return Result.Failure(PasswordResetErrors.InvalidOrExpired);
-        }
-
-        Result consumption = token.Consume(dateTimeProvider.UtcNow);
-
-        return consumption.IsFailure
-            ? consumption
-            : await ApplyAsync(token.UserId, command.NewPassword, cancellationToken);
+        return redemption.IsFailure
+            ? Result.Failure(redemption.Error)
+            : await ApplyAsync(redemption.Value, command.NewPassword, cancellationToken);
     }
 
     private async Task<Result> ApplyAsync(Guid userId, string newPassword, CancellationToken cancellationToken)
