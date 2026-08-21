@@ -39,19 +39,9 @@ internal sealed class RegisterUserCommandHandler(
         string password,
         CancellationToken cancellationToken)
     {
-        User? existing = await userRepository.GetByEmailAsync(credentials.Email, cancellationToken);
-
-        if (existing is not null)
+        if (await IsEmailTakenAsync(credentials.Email, cancellationToken))
         {
-            existing.RecordDuplicateRegistrationAttempt();
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-
-            return Result.Success();
-        }
-
-        if (await WasUsedByADeletedAccountAsync(credentials.Email, cancellationToken))
-        {
-            return Result.Success();
+            return Result.Failure(UserErrors.EmailAlreadyRegistered);
         }
 
         Result<User> user = User.Register(BuildDraft(credentials, password));
@@ -67,8 +57,9 @@ internal sealed class RegisterUserCommandHandler(
         passwordHasher.Hash(password),
         TermsAcceptance.Of(termsPolicy.CurrentVersion, dateTimeProvider.UtcNow));
 
-    private Task<bool> WasUsedByADeletedAccountAsync(Email email, CancellationToken cancellationToken) =>
-        userRepository.ExistsByEmailAsync(emailPseudonymizer.Pseudonymize(email), cancellationToken);
+    private async Task<bool> IsEmailTakenAsync(Email email, CancellationToken cancellationToken) =>
+        await userRepository.ExistsByEmailAsync(email, cancellationToken)
+        || await userRepository.ExistsByEmailAsync(emailPseudonymizer.Pseudonymize(email), cancellationToken);
 
     private async Task<Result> PersistAsync(User user, CancellationToken cancellationToken)
     {
@@ -82,7 +73,7 @@ internal sealed class RegisterUserCommandHandler(
         {
             return exception.Field is CredentialField.Username
                 ? Result.Failure(UserErrors.UsernameAlreadyRegistered)
-                : Result.Success();
+                : Result.Failure(UserErrors.EmailAlreadyRegistered);
         }
 
         return Result.Success();

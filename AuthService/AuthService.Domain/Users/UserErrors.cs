@@ -25,6 +25,9 @@ public static class UserErrors
     public static readonly Error UsernameAlreadyRegistered =
         Error.Conflict("User.UsernameAlreadyRegistered", "El nombre de usuario ya está registrado.");
 
+    public static readonly Error EmailAlreadyRegistered =
+        Error.Conflict("User.EmailAlreadyRegistered", "El correo electrónico ya está registrado.");
+
     public static readonly Error PasswordHashMissing =
         Error.Validation("User.PasswordHashMissing", "La credencial de la cuenta es obligatoria.");
 

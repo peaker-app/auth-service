@@ -34,19 +34,4 @@ public sealed class OutboxTests(AuthServiceApiFactory factory)
 
         processed.Should().BeTrue();
     }
-
-    [Fact]
-    public async Task Register_WithAnExistingEmail_PublishesTheDuplicateAttempt_ViaOutbox()
-    {
-        RegisteredUser user = await _client.RegisterUserAsync();
-        Guid userId = await _factory.FindUserIdByEmailAsync(user.Email);
-
-        using HttpResponseMessage duplicate = await _client.RegisterAsync(
-            user with { Username = ApiTestHelpers.UniqueUsername() });
-
-        bool processed = await _factory.WaitForOutboxProcessedAsync(
-            userId, "DuplicateRegistrationAttemptedDomainEvent");
-
-        processed.Should().BeTrue();
-    }
 }

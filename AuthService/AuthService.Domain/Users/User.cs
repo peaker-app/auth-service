@@ -60,16 +60,6 @@ public sealed class User : AggregateRoot
         return user;
     }
 
-    public void RecordDuplicateRegistrationAttempt()
-    {
-        if (IsDeleted)
-        {
-            return;
-        }
-
-        Raise(new DuplicateRegistrationAttemptedDomainEvent(Id));
-    }
-
     public Result ConfirmEmail()
     {
         if (EmailConfirmed)

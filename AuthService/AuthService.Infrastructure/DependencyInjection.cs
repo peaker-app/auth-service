@@ -87,9 +87,6 @@ public static class DependencyInjection
             IDomainEventHandler<EmailConfirmationRequestedDomainEvent>,
             EmailConfirmationRequestedDomainEventHandler>();
         services.AddScoped<
-            IDomainEventHandler<DuplicateRegistrationAttemptedDomainEvent>,
-            DuplicateRegistrationAttemptedDomainEventHandler>();
-        services.AddScoped<
             IDomainEventHandler<PasswordResetRequestedDomainEvent>,
             PasswordResetRequestedDomainEventHandler>();
     }
@@ -130,7 +127,6 @@ public static class DependencyInjection
 
         services.AddScoped<SmtpMailer>();
         services.AddScoped<IConfirmationEmailSender, SmtpConfirmationEmailSender>();
-        services.AddScoped<IExistingAccountEmailSender, SmtpExistingAccountEmailSender>();
         services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
         services.AddScoped<IEmailQuota, DatabaseEmailQuota>();
     }

@@ -114,26 +114,11 @@ public sealed class DeleteAccountEndpointTests(AuthServiceApiFactory factory)
         using HttpResponseMessage sameUsername = await _client.RegisterAsync(
             new RegisteredUser(ApiTestHelpers.UniqueEmail(), user.Username));
 
-        sameEmail.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        sameEmail.StatusCode.Should().Be(HttpStatusCode.Conflict);
         sameUsername.StatusCode.Should().Be(HttpStatusCode.Conflict);
 
         using HttpResponseMessage login = await _client.LoginAsync(user.Email, ApiTestHelpers.DefaultPassword);
         login.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-    }
-
-    [Fact]
-    public async Task Delete_ThenRegisteringTheSameEmail_NeverAnnouncesThatTheAccountExisted()
-    {
-        RegisteredUser user = await _client.RegisterUserAsync();
-        TokenPair tokens = await _client.LoginWithTokensAsync(user.Email);
-        (await _client.DeleteAccountAsync(tokens.AccessToken)).EnsureSuccessStatusCode();
-        factory.ExistingAccountEmailSender.Clear();
-
-        using HttpResponseMessage response = await _client.RegisterAsync(
-            new RegisteredUser(user.Email, ApiTestHelpers.UniqueUsername()));
-        await Task.Delay(TimeSpan.FromSeconds(3));
-
-        factory.ExistingAccountEmailSender.WasNotified(user.Email).Should().BeFalse();
     }
 
     private async Task<TokenPair> RegisterAndLoginAsync()

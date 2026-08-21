@@ -16,16 +16,11 @@ public sealed class EmailConfirmationOptions
     public string ConfirmationLinkTemplate { get; init; } = "http://localhost:3000/confirm-email?token={token}";
 
     [Required]
-    public string SignInLink { get; init; } = "http://localhost:3000/login";
-
-    [Required]
     public string PasswordResetLinkTemplate { get; init; } = "http://localhost:3000/reset-password?token={token}";
 
     public TimeSpan TokenLifetime { get; init; } = TimeSpan.FromHours(24);
 
     public TimeSpan PasswordResetTokenLifetime { get; init; } = TimeSpan.FromHours(1);
-
-    public Uri SignInUri => new(SignInLink, UriKind.Absolute);
 
     public Uri BuildConfirmationUri(string rawToken) => Build(ConfirmationLinkTemplate, rawToken);
 

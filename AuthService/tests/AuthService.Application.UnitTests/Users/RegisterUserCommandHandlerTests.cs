@@ -2,7 +2,6 @@ using AuthService.Application.Abstractions;
 using AuthService.Application.Users.RegisterUser;
 using AuthService.Application.UnitTests.TestData;
 using AuthService.Domain.Users;
-using AuthService.Domain.Users.Events;
 using Common.Application.Abstractions;
 using Common.Domain.Results;
 using FluentAssertions;
@@ -42,7 +41,7 @@ public sealed class RegisterUserCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WithTheEmailOfADeletedAccount_NeverCreatesAnAccountNorAnnouncesIt()
+    public async Task Handle_WithTheEmailOfADeletedAccount_ReturnsConflictWithoutCreatingAnAccount()
     {
         GivenIdentifiersAreAvailable();
         _userRepository
@@ -53,7 +52,7 @@ public sealed class RegisterUserCommandHandlerTests
 
         Result result = await _handler.Handle(Command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
+        result.Error.Should().Be(UserErrors.EmailAlreadyRegistered);
         _userRepository.DidNotReceive().Add(Arg.Any<User>());
     }
 
@@ -88,43 +87,15 @@ public sealed class RegisterUserCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WithAnExistingEmail_SucceedsWithoutCreatingASecondAccount()
+    public async Task Handle_WithAnExistingEmail_ReturnsConflictWithoutCreatingASecondAccount()
     {
         GivenIdentifiersAreAvailable();
-        GivenTheEmailBelongsTo(Factories.ActiveUser());
+        GivenTheEmailIsTaken();
 
         Result result = await _handler.Handle(Command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
+        result.Error.Should().Be(UserErrors.EmailAlreadyRegistered);
         _userRepository.DidNotReceive().Add(Arg.Any<User>());
-    }
-
-    [Fact]
-    public async Task Handle_WithAnExistingEmail_RaisesTheDuplicateAttemptEvent()
-    {
-        GivenIdentifiersAreAvailable();
-        User existing = Factories.ActiveUser();
-        existing.ClearDomainEvents();
-        GivenTheEmailBelongsTo(existing);
-
-        await _handler.Handle(Command, CancellationToken.None);
-
-        existing.DomainEvents.Should().ContainSingle()
-            .Which.Should().BeOfType<DuplicateRegistrationAttemptedDomainEvent>();
-    }
-
-    [Fact]
-    public async Task Handle_WithAnExistingEmailOfADeletedAccount_StaysSilent()
-    {
-        GivenIdentifiersAreAvailable();
-        User deleted = Factories.DeletedUser();
-        deleted.ClearDomainEvents();
-        GivenTheEmailBelongsTo(deleted);
-
-        Result result = await _handler.Handle(Command, CancellationToken.None);
-
-        result.IsSuccess.Should().BeTrue();
-        deleted.DomainEvents.Should().BeEmpty();
     }
 
     [Fact]
@@ -150,7 +121,7 @@ public sealed class RegisterUserCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenAConcurrentRegistrationTookTheEmail_StillSucceeds()
+    public async Task Handle_WhenAConcurrentRegistrationTookTheEmail_ReturnsConflict()
     {
         GivenIdentifiersAreAvailable();
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>())
@@ -158,7 +129,7 @@ public sealed class RegisterUserCommandHandlerTests
 
         Result result = await _handler.Handle(Command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
+        result.Error.Should().Be(UserErrors.EmailAlreadyRegistered);
     }
 
     [Fact]
@@ -173,12 +144,13 @@ public sealed class RegisterUserCommandHandlerTests
         result.Error.Should().Be(UserErrors.UsernameAlreadyRegistered);
     }
 
-    private void GivenTheEmailBelongsTo(User user) =>
-        _userRepository.GetByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns(user);
+    private void GivenTheEmailIsTaken() =>
+        _userRepository.ExistsByEmailAsync(Email.Create(Factories.DefaultEmail).Value, Arg.Any<CancellationToken>())
+            .Returns(true);
 
     private void GivenIdentifiersAreAvailable()
     {
-        _userRepository.GetByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns((User?)null);
+        _userRepository.ExistsByEmailAsync(Arg.Any<Email>(), Arg.Any<CancellationToken>()).Returns(false);
         _userRepository.ExistsByUsernameAsync(Arg.Any<Username>(), Arg.Any<CancellationToken>()).Returns(false);
         _breachedPasswordChecker.IsBreachedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
     }
