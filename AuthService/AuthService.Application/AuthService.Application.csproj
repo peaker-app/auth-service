@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+        <ProjectReference Include="..\AuthService.Domain\AuthService.Domain.csproj" />
+        <ProjectReference Include="..\..\..\common-library\Common\Common.Application\Common.Application.csproj" />
+        <ProjectReference Include="..\..\..\common-library\Common\Common.Contracts\Common.Contracts.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="AuthService.Application.UnitTests" />
+        <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+    </ItemGroup>
+
+</Project>

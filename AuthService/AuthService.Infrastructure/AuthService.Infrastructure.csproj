@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <ItemGroup>
+        <ProjectReference Include="..\AuthService.Application\AuthService.Application.csproj" />
+        <ProjectReference Include="..\..\..\common-library\Common\Common.Infrastructure\Common.Infrastructure.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Isopoh.Cryptography.Argon2" />
+      <PackageReference Include="MailKit" />
+      <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        <PrivateAssets>all</PrivateAssets>
+      </PackageReference>
+      <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+      <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+      <PackageReference Include="MySql.EntityFrameworkCore" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="AuthService.IntegrationTests" />
+    </ItemGroup>
+
+</Project>

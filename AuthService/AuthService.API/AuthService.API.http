@@ -1,0 +1,35 @@
+@AuthService.API_HostAddress = http://localhost:8081
+
+### Registro
+POST {{AuthService.API_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "hiker@peaker.io",
+  "username": "hiker",
+  "password": "correct-horse-battery-staple"
+}
+
+### Inicio de sesión con correo
+POST {{AuthService.API_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "identifier": "hiker@peaker.io",
+  "password": "correct-horse-battery-staple"
+}
+
+### Inicio de sesión con nombre de usuario
+POST {{AuthService.API_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "identifier": "hiker",
+  "password": "correct-horse-battery-staple"
+}
+
+### Clave pública (JWKS)
+GET {{AuthService.API_HostAddress}}/.well-known/jwks.json
+Accept: application/json
+
+###
