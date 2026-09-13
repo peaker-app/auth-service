@@ -22,10 +22,12 @@ internal sealed class ExportMyDataQueryHandler(
             return Result.Failure<AccountExportResponse>(UserErrors.NotFound(query.UserId));
         }
 
-        IReadOnlyCollection<RefreshToken> sessions =
-            await refreshTokenRepository.GetActiveByUserAsync(user.Id, cancellationToken);
+        DateTime utcNow = dateTimeProvider.UtcNow;
 
-        return ToResponse(user, sessions, dateTimeProvider.UtcNow);
+        IReadOnlyCollection<RefreshToken> sessions =
+            await refreshTokenRepository.GetActiveByUserAsync(user.Id, utcNow, cancellationToken);
+
+        return ToResponse(user, sessions, utcNow);
     }
 
     private static AccountExportResponse ToResponse(

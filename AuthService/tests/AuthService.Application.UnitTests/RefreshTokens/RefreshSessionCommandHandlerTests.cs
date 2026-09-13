@@ -20,6 +20,7 @@ public sealed class RefreshSessionCommandHandlerTests
     private readonly IRefreshTokenRepository _refreshTokenRepository = Substitute.For<IRefreshTokenRepository>();
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
     private readonly IRefreshTokenGenerator _refreshTokenGenerator = Substitute.For<IRefreshTokenGenerator>();
+    private readonly IRefreshTokenPolicy _refreshTokenPolicy = Substitute.For<IRefreshTokenPolicy>();
     private readonly IAuthTokenIssuer _tokenIssuer = Substitute.For<IAuthTokenIssuer>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IDateTimeProvider _dateTimeProvider = Substitute.For<IDateTimeProvider>();
@@ -29,8 +30,15 @@ public sealed class RefreshSessionCommandHandlerTests
     {
         _dateTimeProvider.UtcNow.Returns(Now);
         _refreshTokenGenerator.Hash(Arg.Any<string>()).Returns("token-hash");
+        _refreshTokenPolicy.RotationLeeway.Returns(TimeSpan.FromSeconds(30));
         _handler = new RefreshSessionCommandHandler(
-            _refreshTokenRepository, _userRepository, _refreshTokenGenerator, _tokenIssuer, _unitOfWork, _dateTimeProvider);
+            _refreshTokenRepository,
+            _userRepository,
+            _refreshTokenGenerator,
+            _refreshTokenPolicy,
+            _tokenIssuer,
+            _unitOfWork,
+            _dateTimeProvider);
     }
 
     [Fact]
@@ -69,7 +77,7 @@ public sealed class RefreshSessionCommandHandlerTests
         RefreshToken firstActive = Factories.RefreshTokenFor(userId, Now);
         RefreshToken secondActive = Factories.RefreshTokenFor(userId, Now);
         _refreshTokenRepository.GetByTokenHashAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(reused);
-        _refreshTokenRepository.GetActiveByUserAsync(userId, Arg.Any<CancellationToken>())
+        _refreshTokenRepository.GetActiveByUserAsync(userId, Now, Arg.Any<CancellationToken>())
             .Returns([firstActive, secondActive]);
 
         Result<AuthTokensResponse> result = await _handler.Handle(Command, CancellationToken.None);
@@ -86,13 +94,74 @@ public sealed class RefreshSessionCommandHandlerTests
         RefreshToken expired = Factories.RefreshTokenFor(userId, Now.AddDays(-8));
         RefreshToken activeOnAnotherDevice = Factories.RefreshTokenFor(userId, Now);
         _refreshTokenRepository.GetByTokenHashAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(expired);
-        _refreshTokenRepository.GetActiveByUserAsync(userId, Arg.Any<CancellationToken>())
+        _refreshTokenRepository.GetActiveByUserAsync(userId, Now, Arg.Any<CancellationToken>())
             .Returns([activeOnAnotherDevice]);
 
         Result<AuthTokensResponse> result = await _handler.Handle(Command, CancellationToken.None);
 
         result.Error.Should().Be(RefreshTokenErrors.InvalidOrExpired);
         activeOnAnotherDevice.RevokedAtUtc.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Handle_WithTokenRotatedInsideTheLeeway_IssuesANewPairWithoutRevokingAnything()
+    {
+        User user = Factories.ActiveUser();
+        RefreshToken replacement = Factories.RefreshTokenFor(user.Id, Now);
+        RefreshToken reused = Factories.RefreshTokenFor(user.Id, Now);
+        reused.Revoke(Now.AddSeconds(-5), replacement.Id);
+        RefreshToken activeOnAnotherDevice = Factories.RefreshTokenFor(user.Id, Now);
+        _refreshTokenRepository.GetByTokenHashAsync("token-hash", Arg.Any<CancellationToken>()).Returns(reused);
+        _refreshTokenRepository.IsActiveAsync(replacement.Id, Now, Arg.Any<CancellationToken>()).Returns(true);
+        _refreshTokenRepository.GetActiveByUserAsync(user.Id, Now, Arg.Any<CancellationToken>())
+            .Returns([activeOnAnotherDevice]);
+        _userRepository.GetByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
+        _tokenIssuer.Issue(Arg.Any<User>(), Arg.Any<DateTime>(), Arg.Any<string?>())
+            .Returns(Factories.IssuedFor(Factories.RefreshTokenFor(user.Id, Now)));
+
+        Result<AuthTokensResponse> result = await _handler.Handle(Command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        activeOnAnotherDevice.RevokedAtUtc.Should().BeNull();
+        reused.ReplacedById.Should().Be(replacement.Id);
+    }
+
+    [Fact]
+    public async Task Handle_WithTokenRotatedOutsideTheLeeway_RevokesAllActiveSessions()
+    {
+        Guid userId = Guid.CreateVersion7();
+        RefreshToken replacement = Factories.RefreshTokenFor(userId, Now);
+        RefreshToken reused = Factories.RefreshTokenFor(userId, Now);
+        reused.Revoke(Now.AddMinutes(-5), replacement.Id);
+        RefreshToken activeOnAnotherDevice = Factories.RefreshTokenFor(userId, Now);
+        _refreshTokenRepository.GetByTokenHashAsync("token-hash", Arg.Any<CancellationToken>()).Returns(reused);
+        _refreshTokenRepository.IsActiveAsync(replacement.Id, Now, Arg.Any<CancellationToken>()).Returns(true);
+        _refreshTokenRepository.GetActiveByUserAsync(userId, Now, Arg.Any<CancellationToken>())
+            .Returns([activeOnAnotherDevice]);
+
+        Result<AuthTokensResponse> result = await _handler.Handle(Command, CancellationToken.None);
+
+        result.Error.Should().Be(RefreshTokenErrors.InvalidOrExpired);
+        activeOnAnotherDevice.RevokedAtUtc.Should().Be(Now);
+    }
+
+    [Fact]
+    public async Task Handle_WhenTheReplacementIsNoLongerActive_RevokesAllActiveSessions()
+    {
+        Guid userId = Guid.CreateVersion7();
+        RefreshToken replacement = Factories.RefreshTokenFor(userId, Now);
+        RefreshToken reused = Factories.RefreshTokenFor(userId, Now);
+        reused.Revoke(Now, replacement.Id);
+        RefreshToken activeOnAnotherDevice = Factories.RefreshTokenFor(userId, Now);
+        _refreshTokenRepository.GetByTokenHashAsync("token-hash", Arg.Any<CancellationToken>()).Returns(reused);
+        _refreshTokenRepository.IsActiveAsync(replacement.Id, Now, Arg.Any<CancellationToken>()).Returns(false);
+        _refreshTokenRepository.GetActiveByUserAsync(userId, Now, Arg.Any<CancellationToken>())
+            .Returns([activeOnAnotherDevice]);
+
+        Result<AuthTokensResponse> result = await _handler.Handle(Command, CancellationToken.None);
+
+        result.Error.Should().Be(RefreshTokenErrors.InvalidOrExpired);
+        activeOnAnotherDevice.RevokedAtUtc.Should().Be(Now);
     }
 
     [Fact]
