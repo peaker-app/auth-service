@@ -12,7 +12,9 @@ public sealed class AuthTokenOptions
 
     public TimeSpan AccessTokenLifetime { get; init; } = TimeSpan.FromMinutes(15);
 
-    public TimeSpan RefreshTokenLifetime { get; init; } = TimeSpan.FromDays(7);
+    public TimeSpan RefreshTokenLifetime { get; init; } = TimeSpan.FromDays(30);
+
+    public TimeSpan RefreshTokenRotationLeeway { get; init; } = TimeSpan.FromSeconds(30);
 
     public string? PrivateKeyPem { get; init; }
 
