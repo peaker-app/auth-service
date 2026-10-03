@@ -34,7 +34,7 @@ public static class DependencyInjection
         services.AddLoginThrottle(configuration);
         services.AddTermsPolicy(configuration);
         services.AddDataRetention(configuration);
-        services.AddEventBus(configuration);
+        services.AddEventBus(configuration, new EventBusRegistration("auth"));
 
         return services;
     }
