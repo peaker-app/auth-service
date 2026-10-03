@@ -36,6 +36,9 @@ public sealed class RefreshToken : AggregateRoot
 
     public bool IsActive(DateTime utcNow) => !IsRevoked && !IsExpired(utcNow);
 
+    public Guid? ReplacementIdWithinLeeway(DateTime utcNow, TimeSpan leeway) =>
+        RevokedAtUtc is not null && utcNow - RevokedAtUtc.Value <= leeway ? ReplacedById : null;
+
     public void Revoke(DateTime utcNow, Guid? replacedById = null)
     {
         if (RevokedAtUtc is not null)
