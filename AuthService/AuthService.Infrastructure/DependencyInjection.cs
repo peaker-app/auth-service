@@ -99,6 +99,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher, Argon2IdPasswordHasher>();
         services.AddScoped<IAccessTokenGenerator, RsaJwtTokenGenerator>();
         services.AddScoped<IRefreshTokenGenerator, RefreshTokenGenerator>();
+        services.AddSingleton<IRefreshTokenPolicy, RefreshTokenPolicy>();
         services.AddScoped<IEmailConfirmationTokenGenerator, EmailConfirmationTokenGenerator>();
         services.AddScoped<IPasswordResetTokenGenerator, PasswordResetTokenGenerator>();
         services.AddSingleton<IEmailPseudonymizer, EmailPseudonymizer>();

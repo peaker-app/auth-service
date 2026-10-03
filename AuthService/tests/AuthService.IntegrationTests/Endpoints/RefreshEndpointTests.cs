@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using AuthService.Infrastructure.Persistence;
@@ -27,11 +28,12 @@ public sealed class RefreshEndpointTests(AuthServiceApiFactory factory)
     }
 
     [Fact]
-    public async Task Refresh_ReusingRevokedToken_RevokesWholeChain()
+    public async Task Refresh_ReusingATokenRotatedLongAgo_RevokesWholeChain()
     {
         RegisteredUser user = await _client.RegisterUserAsync();
         TokenPair initial = await _client.LoginWithTokensAsync(user.Email);
         TokenPair rotated = await _client.RefreshTokensAsync(initial.RefreshToken);
+        await _factory.AgeRotationOutOfTheLeewayAsync(Sha256Hex(initial.RefreshToken));
 
         using HttpResponseMessage reuse = await _client.RefreshAsync(initial.RefreshToken);
         using HttpResponseMessage cascade = await _client.RefreshAsync(rotated.RefreshToken);
@@ -39,6 +41,48 @@ public sealed class RefreshEndpointTests(AuthServiceApiFactory factory)
         reuse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         cascade.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
+
+    [Fact]
+    public async Task Refresh_ReusingATokenRotatedWithinTheLeeway_KeepsTheSessionAlive()
+    {
+        RegisteredUser user = await _client.RegisterUserAsync();
+        TokenPair initial = await _client.LoginWithTokensAsync(user.Email);
+        TokenPair rotated = await _client.RefreshTokensAsync(initial.RefreshToken);
+
+        using HttpResponseMessage reuse = await _client.RefreshAsync(initial.RefreshToken);
+        using HttpResponseMessage survivor = await _client.RefreshAsync(rotated.RefreshToken);
+
+        reuse.StatusCode.Should().Be(HttpStatusCode.OK);
+        survivor.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Refresh_TwoConcurrentRotationsWithTheSameToken_NeitherClosesTheSession()
+    {
+        RegisteredUser user = await _client.RegisterUserAsync();
+        TokenPair initial = await _client.LoginWithTokensAsync(user.Email);
+
+        HttpResponseMessage[] responses = await Task.WhenAll(
+            _client.RefreshAsync(initial.RefreshToken),
+            _client.RefreshAsync(initial.RefreshToken));
+
+        try
+        {
+            responses.Should().NotContain(response => response.StatusCode == HttpStatusCode.Unauthorized);
+
+            TokenPair survivor = await ReadTokensAsync(responses[0]);
+            using HttpResponseMessage afterwards = await _client.RefreshAsync(survivor.RefreshToken);
+
+            afterwards.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+        finally
+        {
+            Array.ForEach(responses, response => response.Dispose());
+        }
+    }
+
+    private static async Task<TokenPair> ReadTokensAsync(HttpResponseMessage response) =>
+        (await response.Content.ReadFromJsonAsync<TokenPair>())!;
 
     [Fact]
     public async Task Login_PersistsTheRefreshTokenOnlyAsSha256Hash()

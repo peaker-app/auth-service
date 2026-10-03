@@ -159,6 +159,17 @@ public sealed class AuthServiceApiFactory : WebApplicationFactory<Program>, IAsy
                 token => token.ExpiresAtUtc, DateTime.UtcNow.AddDays(-1)));
     }
 
+    public async Task AgeRotationOutOfTheLeewayAsync(string tokenHash)
+    {
+        await using AsyncServiceScope scope = Services.CreateAsyncScope();
+        AuthDbContext context = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+
+        await context.RefreshTokens
+            .Where(token => token.TokenHash == tokenHash)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(
+                token => token.RevokedAtUtc, DateTime.UtcNow.AddHours(-1)));
+    }
+
     public async Task<bool> IsEmailConfirmedAsync(Guid userId)
     {
         await using AsyncServiceScope scope = Services.CreateAsyncScope();

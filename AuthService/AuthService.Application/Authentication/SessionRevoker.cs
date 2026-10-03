@@ -17,10 +17,10 @@ internal sealed class SessionRevoker(
 {
     public async Task RevokeAllAsync(User user, CancellationToken cancellationToken)
     {
-        IReadOnlyCollection<RefreshToken> activeTokens =
-            await refreshTokenRepository.GetActiveByUserAsync(user.Id, cancellationToken);
-
         DateTime utcNow = dateTimeProvider.UtcNow;
+
+        IReadOnlyCollection<RefreshToken> activeTokens =
+            await refreshTokenRepository.GetActiveByUserAsync(user.Id, utcNow, cancellationToken);
 
         foreach (RefreshToken token in activeTokens)
         {

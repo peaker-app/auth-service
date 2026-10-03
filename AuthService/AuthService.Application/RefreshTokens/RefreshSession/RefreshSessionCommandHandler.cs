@@ -12,6 +12,7 @@ internal sealed class RefreshSessionCommandHandler(
     IRefreshTokenRepository refreshTokenRepository,
     IUserRepository userRepository,
     IRefreshTokenGenerator refreshTokenGenerator,
+    IRefreshTokenPolicy refreshTokenPolicy,
     IAuthTokenIssuer tokenIssuer,
     IUnitOfWork unitOfWork,
     IDateTimeProvider dateTimeProvider) : ICommandHandler<RefreshSessionCommand, AuthTokensResponse>
@@ -26,9 +27,7 @@ internal sealed class RefreshSessionCommandHandler(
 
         if (existing is null) return Result.Failure<AuthTokensResponse>(RefreshTokenErrors.InvalidOrExpired);
 
-        // Motivo: solo la reutilización de un token ya revocado delata un compromiso de la sesión.
-        // La caducidad natural es uso normal y no puede arrastrar las sesiones de otros dispositivos.
-        if (existing.IsRevoked)
+        if (existing.IsRevoked && !await IsRotationRaceAsync(existing, utcNow, cancellationToken))
             return await RevokeCompromisedSessionsAsync(existing.UserId, utcNow, cancellationToken);
 
         if (existing.IsExpired(utcNow))
@@ -45,13 +44,24 @@ internal sealed class RefreshSessionCommandHandler(
         return issued.Response;
     }
 
+    private async Task<bool> IsRotationRaceAsync(
+        RefreshToken reused,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        Guid? replacementId = reused.ReplacementIdWithinLeeway(utcNow, refreshTokenPolicy.RotationLeeway);
+
+        return replacementId is not null
+            && await refreshTokenRepository.IsActiveAsync(replacementId.Value, utcNow, cancellationToken);
+    }
+
     private async Task<Result<AuthTokensResponse>> RevokeCompromisedSessionsAsync(
         Guid userId,
         DateTime utcNow,
         CancellationToken cancellationToken)
     {
         IReadOnlyCollection<RefreshToken> activeTokens =
-            await refreshTokenRepository.GetActiveByUserAsync(userId, cancellationToken);
+            await refreshTokenRepository.GetActiveByUserAsync(userId, utcNow, cancellationToken);
 
         foreach (RefreshToken token in activeTokens)
         {
